@@ -1,0 +1,17 @@
+syntax = "proto2";
+// option optimize_for = LITE_RUNTIME;
+package config_pb;
+
+enum LogLevel {
+  INFO = 0;
+  WARNING = 1;
+  ERROR = 2;
+}
+
+message CaptureConfig {
+  // Specifies the default capture directory
+  // any recording session will then be stored under directory/year_month_day_hour_minute_second/
+  optional string directory = 1 [default = "cap"];
+  optional LogLevel min_log_level = 2 [default = INFO];
+  optional bool show_console = 3 [default = true];
+}

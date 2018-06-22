@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26228.12
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libMinHook", "external\minhook\libMinHook.vcxproj", "{F142A341-5EE0-442D-A15F-98AE9B48DBAE}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wrapper", "wrapper\wrapper.vcxproj", "{5B8EF7A4-C369-4BF1-BF01-229B77EAEC84}"
+	ProjectSection(ProjectDependencies) = postProject
+		{F142A341-5EE0-442D-A15F-98AE9B48DBAE} = {F142A341-5EE0-442D-A15F-98AE9B48DBAE}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dxgi", "dxgi\dxgi.vcxproj", "{3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5B8EF7A4-C369-4BF1-BF01-229B77EAEC84} = {5B8EF7A4-C369-4BF1-BF01-229B77EAEC84}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "server", "plugins\server\server.vcxproj", "{4252A0F9-0B5D-4ECF-A7F1-F944889FE961}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE} = {3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "capture", "plugins\capture\capture.vcxproj", "{38FA3D93-8D70-4733-85DE-CE78DE84EC55}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE} = {3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "python", "plugins\python\python.vcxproj", "{C31E372A-63F0-4F5E-82C2-AB4CD78581E7}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE} = {3013DDEF-B7FF-4DE9-8BDD-28AEF11B4ADE}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4252A0F9-0B5D-4ECF-A7F1-F944889FE961} = {C20F4609-6B7C-4239-8248-D20C3F05C130}
+		{38FA3D93-8D70-4733-85DE-CE78DE84EC55} = {C20F4609-6B7C-4239-8248-D20C3F05C130}
+		{C31E372A-63F0-4F5E-82C2-AB4CD78581E7} = {C20F4609-6B7C-4239-8248-D20C3F05C130}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
+EndGlobal
