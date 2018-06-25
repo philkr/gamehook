@@ -4,7 +4,6 @@
 #include "dx11.h"
 #include "util.h"
 #include "api.h"
-#include "../minhook/include/MinHook.h"
 
 
 BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID) {
