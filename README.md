@@ -29,14 +29,23 @@ year = {2018}
 
 You need Windows (10) and VC++ 2017 to compile the source. All dependencies (minhook, pybind11, simple-web-server, asio) are included in this repo.
 
-Once compiled copy the `gamewrap.dll` into the directory of the games main executable and rename it to `dxgi.dll`, also copy any of the plugins you with to use (files with ending `.hk`).
+Once compiled copy the `gamehook.dll` into the directory of the games main executable and rename it to `dxgi.dll`, also copy any of the plugins you with to use (files with ending `.hk`).
 Then start the game. If the game was successfully hooked you'll see a command prompt with glorious debug information and a file called 'intercept.log'.
 
 Make sure to remove any other asi loader you might be uses (e.g. `dinput8.dll`). Also make sure to disable the steam overlay, as it might interfere with gamehook.
 
 There are currently two ways to view the captured output:
- 1. `examples/server` implements a simple TCP server than allows a python client (seperate repo ) to interface with the gamewrap
+ 1. `plugins/server` implements a simple HTTP server than allows a browser to interface with the gamehook
+ 2. `plugins/capture` dumps the captured files to disk
 
+## Where to go from here?
+If you're interested in hooking into GTA V, check out the [GTA V plugin](https://github.com/philkr/gamehook_gtav).
+If you prefer to use python to prototype your plugin try `plugins/python`.
+
+### Writing your own plugin
+I highly recommend launching a new game without gamehook first and using renderdoc to debug it.
+Renderdoc can show you how the rendering pipeline works, and how to hook into it.
+It might also be a lot easier to modify an existing plugin than writing your own.
 
 ## Known bugs
 If you're resizing the game window (change resolution) while gamehook is running be ready for the game to crash. Changing graphics settings should generally be save though.
