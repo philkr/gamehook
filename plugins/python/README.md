@@ -7,3 +7,5 @@ The python controllers currently support only a subset of commands.
 Finally, python plugins can be reloaded seemlessly (press F11).
 
 See `example.py` for a simple python example.
+
+If you're working on a GTA V plugin you might find [pyhookv](https://github.com/philkr/pyhookv) useful.
