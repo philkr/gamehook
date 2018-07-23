@@ -857,8 +857,6 @@ void hookSwapChain(IUnknown* pDevice, HWND wnd, IDXGISwapChain** ppSwapChain) {
 	}
 }
 
-static const D3D_FEATURE_LEVEL force_feature_11_1[] = { D3D_FEATURE_LEVEL_11_1 };
-
 static uint32_t hooking_device = 0, hooking_swapchain = 0;
 Hook<HRESULT, IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT, CONST D3D_FEATURE_LEVEL*, UINT, UINT, ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext**> hD3D11CreateDevice;
 HRESULT WINAPI nD3D11CreateDevice(IDXGIAdapter* pAdapter, D3D_DRIVER_TYPE DriverType, HMODULE Software,
@@ -869,9 +867,7 @@ HRESULT WINAPI nD3D11CreateDevice(IDXGIAdapter* pAdapter, D3D_DRIVER_TYPE Driver
 		Flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 		hooking_device++;
-		HRESULT r = hD3D11CreateDevice(pAdapter, DriverType, Software, Flags, force_feature_11_1, 1, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext);
-		if (pFeatureLevels && FeatureLevels && pFeatureLevel)
-			*pFeatureLevel = pFeatureLevels[0];
+		HRESULT r = hD3D11CreateDevice(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext);
 		if (ppDevice && *ppDevice)
 			hookDevice(ppDevice, ppImmediateContext);
 		hooking_device--;
@@ -880,7 +876,7 @@ HRESULT WINAPI nD3D11CreateDevice(IDXGIAdapter* pAdapter, D3D_DRIVER_TYPE Driver
 		return hD3D11CreateDevice(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext);
 	}
 }
-HRESULT WINAPI nCreateDXGIFactory(REFIID riid, void **ppFactory);
+
 Hook<HRESULT, IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT , CONST D3D_FEATURE_LEVEL*, UINT, UINT, CONST DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**, ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext**> hD3D11CreateDeviceAndSwapChain;
 HRESULT WINAPI nD3D11CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter, D3D_DRIVER_TYPE DriverType, HMODULE Software,
 	UINT Flags, CONST D3D_FEATURE_LEVEL* pFeatureLevels, UINT FeatureLevels, UINT SDKVersion, CONST DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
@@ -892,8 +888,7 @@ HRESULT WINAPI nD3D11CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter, D3D_DRIVER
 #endif
 		hooking_device++;
 		bool hs = !(hooking_swapchain++);
-		HRESULT r = hD3D11CreateDeviceAndSwapChain(pAdapter, DriverType, Software, Flags, force_feature_11_1, 1, SDKVersion, pSwapChainDesc, ppSwapChain, ppDevice, pFeatureLevel, ppImmediateContext);
-		if (pFeatureLevels && FeatureLevels && pFeatureLevel) *pFeatureLevel = pFeatureLevels[0];
+		HRESULT r = hD3D11CreateDeviceAndSwapChain(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, pSwapChainDesc, ppSwapChain, ppDevice, pFeatureLevel, ppImmediateContext);
 		// Hook into them
 		if (ppDevice && *ppDevice)
 			hookDevice(ppDevice, ppImmediateContext);

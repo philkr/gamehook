@@ -434,6 +434,8 @@ template<int V>
 			return parseV<0x500>(buf, n);
 		if (version == 0x400)
 			return parseV<0x400>(buf, n);
+		if (version == 0x401)
+			return parseV<0x400>(buf, n);
 		LOG(ERR) << "Unknown shader version " << std::hex << version << " using 400";
 		return parseV<0x400>(buf, n);
 	}
