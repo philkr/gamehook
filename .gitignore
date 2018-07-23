@@ -260,3 +260,6 @@ paket-files/
 __pycache__/
 *.pyc
 /wrapper/shaders/compiled_*.h
+
+/lib*/*.hk
+/lib*/*.dll
