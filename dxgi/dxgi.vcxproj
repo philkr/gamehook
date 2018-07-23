@@ -135,10 +135,12 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="blacklist.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="dxgi.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="blacklist.h" />
     <ClInclude Include="dxgi.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
