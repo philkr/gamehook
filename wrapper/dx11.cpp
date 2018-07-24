@@ -98,10 +98,454 @@ template<typename T, typename O> struct IndexHandler {
 	}
 };
 
+// The GameHook implementation is split into multiple base classes (to make the code more managable)
+
+// GameHookIO does all the IO handling
+struct GameHookIO : virtual public IOHookHigh, virtual public MainGameController {
+	// IOHookHigh -> GameController
+	virtual bool handleKeyDown(unsigned char key, unsigned char special_status) {
+		return onKeyDown(key, special_status);
+	}
+	virtual bool handleKeyUp(unsigned char key) {
+		return onKeyUp(key);
+	}
+	// GameController -> IOHookHigh
+	virtual void keyDown(unsigned char key, bool syskey = false) {
+		IOHookHigh::sendKeyDown(key, syskey);
+	}
+	virtual void keyUp(unsigned char key, bool syskey = false) {
+		IOHookHigh::sendKeyUp(key);
+	}
+	virtual const std::vector<uint8_t> & keyState() const {
+		return key_state;
+	}
+	virtual void mouseDown(float x, float y, uint8_t button) {
+		IOHookHigh::sendMouseDown(uint16_t((x + 1) / 2 * (defaultWidth() - 1)), uint16_t((1 - y) / 2 * (defaultHeight() - 1)), button);
+	}
+	virtual void mouseUp(float x, float y, uint8_t button) {
+		IOHookHigh::sendMouseUp(uint16_t((x + 1) / 2 * (defaultWidth() - 1)), uint16_t((1 - y) / 2 * (defaultHeight() - 1)), button);
+	}
+};
+
+// GameHookBuffer does all the CBuffer, vertex and index buffer memory management
+struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameController {
+	GPUMemoryManager memory_manager;
+	IndexHandler<ID3D11Buffer*, Buffer> buffer_id;
+	BufferInfo * buffer_info;
+
+	GameHookBuffer(BufferInfo * buffer_info) :memory_manager(this), buffer_info(buffer_info) {
+		ASSERT(buffer_info != NULL);
+	}
+
+	virtual HRESULT Map(ID3D11Resource *pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE *pMappedResource) override {
+		TIC;
+		HRESULT hr = D3D11Hook::Map(pResource, Subresource, MapType, MapFlags, pMappedResource);
+		if (Subresource == 0 && MapType != D3D11_MAP_READ) {
+			memory_manager.map(pResource, pMappedResource);
+		}
+		TOC;
+		return hr;
+	}
+	virtual void Unmap(ID3D11Resource *pResource, UINT Subresource) override {
+		TIC;
+		if (Subresource == 0)
+			memory_manager.unmap(pResource);
+		D3D11Hook::Unmap(pResource, Subresource);
+		TOC;
+	}
+
+	virtual HRESULT CreateBuffer(const D3D11_BUFFER_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Buffer **ppBuffer) {
+		TIC;
+		HRESULT hr = D3D11Hook::CreateBuffer(pDesc, pInitialData, ppBuffer);
+		if (SUCCEEDED(hr) && ppBuffer && *ppBuffer && pDesc && pDesc->BindFlags | D3D11_BIND_CONSTANT_BUFFER && pDesc->ByteWidth <= 256)
+			memory_manager.cacheBuffer(*ppBuffer);
+		TOC;
+		return hr;
+	}
+
+	virtual std::shared_ptr<GPUMemory> readBuffer(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate) {
+		TIC;
+		std::shared_ptr<GPUMemory> r;
+		ID3D11Buffer * bf = buffer_id(b);
+		if (bf)
+			r = memory_manager.read(bf, offset, n, immediate);
+		TOC;
+		return r;
+	}
+	virtual size_t bufferSize(Buffer b) {
+		ID3D11Buffer * bf = buffer_id(b);
+		D3D11_BUFFER_DESC d;
+		bf->GetDesc(&d);
+		return d.ByteWidth;
+	}
+	virtual void IASetVertexBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppVertexBuffers, const UINT *pStrides, const UINT *pOffsets) {
+		if (StartSlot == 0)
+			buffer_info->vertex = buffer_id(ppVertexBuffers[0]);
+		D3D11Hook::IASetVertexBuffers(StartSlot, NumBuffers, ppVertexBuffers, pStrides, pOffsets);
+	}
+	virtual void IASetIndexBuffer(ID3D11Buffer *pIndexBuffer, DXGI_FORMAT Format, UINT Offset) {
+		buffer_info->index = buffer_id(pIndexBuffer);
+		D3D11Hook::IASetIndexBuffer(pIndexBuffer, Format, Offset);
+	}
+	virtual void PSSetConstantBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers) {
+		buffer_id(buffer_info->pixel_constant, ppConstantBuffers, NumBuffers, StartSlot);
+		D3D11Hook::PSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
+	}
+	virtual void PSSetConstantBuffers1(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers, const UINT *pFirstConstant, const UINT *pNumConstants) {
+		LOG(ERR) << "Cannot intercept 'PSSetConstantBuffers1'";
+		D3D11Hook::PSSetConstantBuffers1(StartSlot, NumBuffers, ppConstantBuffers, pFirstConstant, pNumConstants);
+	}
+	virtual void VSSetConstantBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers) {
+		buffer_id(buffer_info->vertex_constant, ppConstantBuffers, NumBuffers, StartSlot);
+		D3D11Hook::VSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
+	}
+	virtual void VSSetConstantBuffers1(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers, const UINT *pFirstConstant, const UINT *pNumConstants) {
+		LOG(ERR) << "Cannot intercept 'VSSetConstantBuffers1'";
+		D3D11Hook::VSSetConstantBuffers1(StartSlot, NumBuffers, ppConstantBuffers, pFirstConstant, pNumConstants);
+	}
+};
+
+// GameHookShader does all the shader management
+struct GameHookShader : virtual public D3D11Hook, virtual public MainGameController {
+public: // Types
+	template<typename DX_S> struct _ShaderInfo {
+		std::shared_ptr<Shader> shader;
+		RegInfo uav, rtv;
+		std::vector<ShaderImp::Buffer> cbuffers;
+	};
+	typedef _ShaderInfo<ID3D11PixelShader> PixelShaderInfo;
+	typedef _ShaderInfo<ID3D11VertexShader> VertexShaderInfo;
+public: // Variables
+	IndexHandler<ID3D11ShaderResourceView*, Texture2D> srv_id;
+	std::unordered_map<ID3D11PixelShader*, std::shared_ptr<PixelShaderInfo> > pixel_shader_;
+	std::unordered_map<ID3D11VertexShader*, std::shared_ptr<VertexShaderInfo> > vertex_shader_;
+
+	std::unordered_map<ShaderHash, ID3D11PixelShader*> built_pixel_shader_;
+	std::unordered_map<ShaderHash, ID3D11VertexShader*> built_vertex_shader_;
+
+	std::shared_ptr<PixelShaderInfo> current_pixel_shader_;
+	std::shared_ptr<VertexShaderInfo> current_vertex_shader_;
+
+	bool custom_pixel_shader_bound_ = false, custom_vertex_shader_bound_ = false;
+
+	ShaderInfo * shader_info;
+public: // D3D11Hook functions
+	GameHookShader(ShaderInfo * shader_info) :shader_info(shader_info) {
+		ASSERT(shader_info != NULL);
+	}
+
+	virtual HRESULT CreateVertexShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11VertexShader **ppVertexShader) {
+		TIC;
+		HRESULT r = D3D11Hook::CreateVertexShader(pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
+		if (SUCCEEDED(r)) {
+			// Create shader object
+			std::shared_ptr<VertexShaderInfo> info = std::make_shared<VertexShaderInfo>();
+			info->shader = std::make_shared<VertexShader>(ByteCode((const char *)pShaderBytecode, (const char *)pShaderBytecode + BytecodeLength));
+			vertex_shader_[*ppVertexShader] = info;
+
+			onCreateShader(info->shader);
+		}
+		TOC;
+		return r;
+	}
+	virtual HRESULT CreatePixelShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11PixelShader **ppPixelShader) {
+		TIC;
+		HRESULT r = D3D11Hook::CreatePixelShader(pShaderBytecode, BytecodeLength, pClassLinkage, ppPixelShader);
+		if (SUCCEEDED(r)) {
+			// Create shader object
+			std::shared_ptr<PixelShaderInfo> info = std::make_shared<PixelShaderInfo>();
+			info->shader = std::make_shared<PixelShader>(ByteCode((const char *)pShaderBytecode, (const char *)pShaderBytecode + BytecodeLength));
+			pixel_shader_[*ppPixelShader] = info;
+
+			onCreateShader(info->shader);
+		}
+		TOC;
+		return r;
+	}
+
+	virtual void PSSetShader(ID3D11PixelShader *pPixelShader, ID3D11ClassInstance *const *ppClassInstances, UINT NumClassInstances) {
+		shader_info->pixel = ShaderHash();
+		current_pixel_shader_.reset();
+		auto i = pixel_shader_.find(pPixelShader);
+		if (i != pixel_shader_.end()) {
+			custom_pixel_shader_bound_ = false;
+			current_pixel_shader_ = i->second;
+			shader_info->pixel = current_pixel_shader_->shader->hash();
+			onBindShader(current_pixel_shader_->shader);
+		}
+		if (!custom_pixel_shader_bound_)
+			D3D11Hook::PSSetShader(pPixelShader, ppClassInstances, NumClassInstances);
+	}
+	virtual void VSSetShader(ID3D11VertexShader *pVertexShader, ID3D11ClassInstance *const *ppClassInstances, UINT NumClassInstances) {
+		shader_info->vertex = ShaderHash();
+		current_vertex_shader_.reset();
+		auto i = vertex_shader_.find(pVertexShader);
+		if (i != vertex_shader_.end()) {
+			custom_vertex_shader_bound_ = false;
+			current_vertex_shader_ = i->second;
+			shader_info->vertex = current_vertex_shader_->shader->hash();
+			onBindShader(current_vertex_shader_->shader);
+		}
+		if (!custom_vertex_shader_bound_)
+			D3D11Hook::VSSetShader(pVertexShader, ppClassInstances, NumClassInstances);
+	}
+
+	virtual void buildShader(std::shared_ptr<Shader> shader) final {
+		if (shader->type() == Shader::PIXEL && !built_pixel_shader_.count(shader->hash())) {
+			ID3D11PixelShader * s;
+			HRESULT hr = D3D11Hook::CreatePixelShader(shader->data(), shader->size(), NULL, &s);
+			if (FAILED(hr)) {
+				LOG(WARN) << "Failed to build shader " << shader->hash() << " : " << std::hex << hr << std::dec;
+				LOG(INFO) << shader->disassemble();
+			} else {
+				built_pixel_shader_[shader->hash()] = s;
+			}
+		}
+		if (shader->type() == Shader::VERTEX && !built_vertex_shader_.count(shader->hash())) {
+			ID3D11VertexShader * s;
+			HRESULT hr = D3D11Hook::CreateVertexShader(shader->data(), shader->size(), NULL, &s);
+			if (FAILED(hr)) {
+				LOG(WARN) << "Failed to build shader " << shader->hash() << " : " << std::hex << hr << std::dec;
+			} else {
+				built_vertex_shader_[shader->hash()] = s;
+			}
+		}
+	}
+
+	virtual void bindShader(std::shared_ptr<Shader> shader) final {
+		buildShader(shader);
+		if (shader->type() == Shader::PIXEL) {
+			auto it = built_pixel_shader_.find(shader->hash());
+			if (it != built_pixel_shader_.end()) {
+				custom_pixel_shader_bound_ = true;
+				D3D11Hook::PSSetShader(it->second, NULL, 0);
+
+				// TODO: Deal with uav's and rtv's
+			}
+		}
+		if (shader->type() == Shader::VERTEX) {
+			auto it = built_vertex_shader_.find(shader->hash());
+			if (it != built_vertex_shader_.end()) {
+				custom_vertex_shader_bound_ = true;
+				D3D11Hook::VSSetShader(it->second, NULL, 0);
+			}
+		}
+	}
+
+	virtual void PSSetShaderResources(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView *const *ppShaderResourceViews) {
+		if (StartSlot == 0)
+			shader_info->ps_texture_id = srv_id(ppShaderResourceViews[0]);
+		D3D11Hook::PSSetShaderResources(StartSlot, NumViews, ppShaderResourceViews);
+	}
+
+
+
+	//// Intercept shader creation
+	//void inject(std::shared_ptr<VertexShaderInfo> info, ID3D11ClassLinkage *pClassLinkage = nullptr) {
+	//	std::shared_ptr<Shader> injection_shader = injectShader(info->shader);
+	//	if (injection_shader) {
+	//		std::shared_ptr<Shader> injected_shader = Shader::merge(info->shader, injection_shader);
+	//		if (injected_shader) {
+	//			HRESULT hr = D3D11Hook::CreateVertexShader(injected_shader->data(), injected_shader->size(), pClassLinkage, &(info->injected_shader));
+	//			if (FAILED(hr)) {
+	//				LOG(WARN) << "Failed to compile injected shader " << info->shader->hash() << " : " << std::hex << hr << std::dec;
+	//				LOG(INFO) << info->shader->disassemble();
+	//				LOG(INFO) << "------------";
+	//				LOG(INFO) << injection_shader->disassemble();
+	//				LOG(INFO) << "------------";
+	//				LOG(INFO) << injected_shader->disassemble();
+	//			} else {
+	//				info->cbuffers = injected_shader->cbuffers();
+	//			}
+	//		} else {
+	//			LOG(WARN) << "Shader injection merge failed! " << info->shader->hash();
+	//			LOG(INFO) << info->shader->disassemble();
+	//			LOG(INFO) << "------------";
+	//			LOG(INFO) << injection_shader->disassemble();
+	//		}
+	//	}
+	//}
+	//void inject(std::shared_ptr<PixelShaderInfo> info, ID3D11ClassLinkage *pClassLinkage = nullptr) {
+	//	std::shared_ptr<Shader> injection_shader = injectShader(info->shader);
+	//	if (injection_shader) {
+	//		std::shared_ptr<Shader> injected_shader = Shader::merge(info->shader, injection_shader);
+	//		if (injected_shader) {
+	//			HRESULT hr = D3D11Hook::CreatePixelShader(injected_shader->data(), injected_shader->size(), pClassLinkage, &(info->injected_shader));
+	//			if (FAILED(hr)) {
+	//				LOG(WARN) << "Failed to compile injected shader " << info->shader->hash() << " : " << std::hex << hr << std::dec;
+	//				LOG(INFO) << info->shader->disassemble();
+	//				LOG(INFO) << "------------";
+	//				LOG(INFO) << injection_shader->disassemble();
+	//				LOG(INFO) << "------------";
+	//				LOG(INFO) << injected_shader->disassemble();
+	//			} else {
+	//				info->cbuffers = injected_shader->cbuffers();
+	//				for (const auto & s : injected_shader->sbuffers())
+	//					if (custom_render_targets_.count(s.name))
+	//						info->uav[s.name] = s.bind_point;
+
+	//				for (const auto & s : injected_shader->outputs()) {
+	//					std::string name = s.name;
+	//					if (custom_render_targets_.count(name))
+	//						info->rtv[name] = s.bind_point;
+	//					name = name.substr(0, name.size() - 1);
+	//					if (custom_render_targets_.count(name))
+	//						info->rtv[name] = s.bind_point;
+	//				}
+	//				if (!info->uav.size() && !info->rtv.size()) {
+	//					LOG(WARN) << "Injected shader does not contain any outputs, ignoring!";
+	//					info->injected_shader->Release();
+	//					info->injected_shader = nullptr;
+	//				}
+	//			}
+	//		} else {
+	//			LOG(WARN) << "Shader injection merge failed! " << info->shader->hash();
+	//			LOG(INFO) << info->shader->disassemble();
+	//			LOG(INFO) << "------------";
+	//			LOG(INFO) << injection_shader->disassemble();
+	//		}
+	//	}
+	//}
+
+
+
+};
+
+
 struct GameHook : public D3D11Hook, public IOHookHigh, public MainGameController {
+public:
+	typedef std::unordered_map<std::string, uint32_t> RegInfo;
+	struct PostFXShader {
+		ID3D11PixelShader* shader = nullptr;
+		RegInfo output, inputs;
+		std::vector<ShaderImp::Buffer> cbuffers;
+	};
+	std::unordered_map<ShaderHash, PostFXShader> postfx_shaders;
+	std::shared_ptr<FXShader> fx_shader;
+
+public: // Global data
+#ifdef TIMING
 	Timer timer[4];
+#endif
+
+	// Frame and drawing information
+	uint32_t frame_count = 0, draw_count = 0;
+	uint32_t width = 0, height = 0;
+	// Recording information
+	RecordingType current_recording_type = NONE, next_recording_type = NONE;
+
+	// Memory and buffer management
+	std::unordered_map<std::string, std::shared_ptr<CBufferImp>> bound_cbuffers;
+
+	// Render targets
+	std::unordered_map<std::string, std::shared_ptr<BaseRenderTarget> > targets_, visible_targets_;
+	std::unordered_map<std::string, std::shared_ptr<RWTextureTarget> > custom_render_targets_;
+public: // IO Handling
 	bool reload_dlls = false;
-	GameHook() :MainGameController(), memory_manager(this) {
+	virtual bool onKeyDown(unsigned char key, unsigned char special_status) {
+		// Reload keyboard shortcut (CTLR + F10)
+		if (key == VK_F10 && (special_status & 7) == CTRL) {
+			reload_dlls = true;
+			return true;
+		}
+		return MainGameController::onKeyDown(key, special_status);
+	}
+public: // Buffer management
+
+
+	
+
+public: // DX11 intercept
+	virtual HRESULT Present(unsigned int SyncInterval, unsigned int Flags) override {
+		// Present serves as the main control loop in GameHook
+
+		TIC;
+		// Get width and height of the main window (this might change over time)
+		{
+			DXGI_SWAP_CHAIN_DESC desc;
+			GetDesc(&desc);
+			width = desc.BufferDesc.Width;
+			height = desc.BufferDesc.Height;
+		}
+
+		if (!Flags) {
+			GetLastPresentCount(&frame_count);
+
+			// Save the current frame
+			if (frame_count > 0) {
+				// Fetch all delayed buffers
+				memory_manager.fetchDelayed();
+
+				// Post process
+				MainGameController::onPostProcess(frame_count);
+
+				// Fetch all custom render targets
+				for (const auto & t : custom_render_targets_)
+					t.second->fetch();
+
+				// Map all targets
+				for (const auto & t : targets_)
+					if (t.second)
+						t.second->mapOutputs();
+
+				MainGameController::onEndFrame(frame_count);
+
+				// Unmap all targets
+				for (const auto & t : targets_)
+					if (t.second)
+						t.second->unmapOutputs();
+
+				// Reset buffers
+				memory_manager.clear();
+			}
+
+			// Present the current frame
+			HRESULT r = D3D11Hook::Present(SyncInterval, Flags);
+
+			MainGameController::onPresent(frame_count);
+
+			// Should we reload all plugins
+			if (reload_dlls) {
+				// Remove all the old controllers
+				clearControllers();
+				custom_render_targets_.clear();
+				targets_.clear();
+				visible_targets_.clear();
+
+				// Reload the plugins
+				reloadAPI(true, false);
+
+				// Fire up the next controllers
+				startControllers();
+				reload_dlls = false;
+			}
+
+			// Setup all the custon render targets
+			for (const auto & t : custom_render_targets_) {
+				t.second->setup(width, height);
+				UINT v[4] = { 0 };
+				D3D11Hook::ClearUnorderedAccessViewUint(*t.second, v);
+			}
+
+			// Start next frame
+			draw_count = 0;
+			current_recording_type = next_recording_type;
+			next_recording_type = NONE;
+			TOC;
+			PRINT_TIMER;
+			TIC;
+			MainGameController::onBeginFrame(frame_count + 1);
+
+			TOC;
+			return r;
+		}
+		TOC;
+		return D3D11Hook::Present(SyncInterval, Flags);
+	}
+
+
+public: // GameController
+	GameHook() :MainGameController() {
 		startControllers();
 	}
 
@@ -133,228 +577,16 @@ struct GameHook : public D3D11Hook, public IOHookHigh, public MainGameController
 			inject(i.second);
 	}
 
-	uint32_t frame_count, draw_count = 0;
-	uint32_t width = 0, height = 0;
-	RecordingType current_recording_type = NONE;
-	GPUMemoryManager memory_manager;
-	std::unordered_map<std::string, std::shared_ptr<CBufferImp>> bound_cbuffers;
-
-	std::unordered_map<std::string, std::shared_ptr<BaseRenderTarget> > targets_, visible_targets_;
-	std::unordered_map<std::string, std::shared_ptr<RWTextureTarget> > custom_render_targets_;
-
-	virtual HRESULT Present(unsigned int SyncInterval, unsigned int Flags) override {
-		TIC;
-		// Get width and height of the window
-		{
-			DXGI_SWAP_CHAIN_DESC desc;
-			GetDesc(&desc);
-			width  = desc.BufferDesc.Width;
-			height = desc.BufferDesc.Height;
-		}
-
-		if (!Flags) {
-			GetLastPresentCount(&frame_count);
-
-			// Save the current frame
-			if (frame_count > 0) {
-				// Fetch all delayed buffers
-				memory_manager.fetchDelayed();
-
-				// Post process
-				MainGameController::postProcess(frame_count);
-
-				// Fetch all custom render targets
-				for (const auto & t : custom_render_targets_)
-					t.second->fetch();
-
-				// Map all targets
-				for (const auto & t : targets_)
-					if (t.second)
-						t.second->mapOutputs();
-				
-				MainGameController::endFrame(frame_count);
-
-				// Unmap all targets
-				for (const auto & t : targets_)
-					if (t.second)
-						t.second->unmapOutputs();
-
-				// Reset buffers
-				memory_manager.clear();
-			}
-
-			// Present the current frame
-			HRESULT r = D3D11Hook::Present(SyncInterval, Flags);
-
-			// Should we reload all plugins
-			if (reload_dlls) {
-				if (stop()) {
-					// Remove all the old controllers
-					clearControllers();
-					custom_render_targets_.clear();
-					targets_.clear();
-					visible_targets_.clear();
-
-					// Reload the plugins
-					reloadAPI(true, false);
-
-					// Fire up the next controllers
-					startControllers();
-					reload_dlls = false;
-				}
-			}
-
-			// Setup all the custon render targets
-			for (const auto & t : custom_render_targets_) {
-				t.second->setup(width, height);
-				UINT v[4] = { 0 };
-				D3D11Hook::ClearUnorderedAccessViewUint(*t.second, v);
-			}
-
-			// Start next frame
-			draw_count = 0;
-			current_recording_type = MainGameController::recordFrame(frame_count + 1);
-			TOC;
-			PRINT_TIMER;
-			TIC;
-			MainGameController::startFrame(frame_count + 1);
-
-			TOC;
-			return r;
-		}
-		TOC;
-		return D3D11Hook::Present(SyncInterval, Flags);
-	}
-
+	// Recording logic
 	virtual RecordingType currentRecordingType() const {
 		return current_recording_type;
 	}
-
-	// Intercept shader creation
-	struct VertexShaderInfo {
-		std::shared_ptr<Shader> shader;
-		ID3D11VertexShader* injected_shader = nullptr;
-		std::vector<ShaderImp::Buffer> cbuffers;
-		operator ID3D11VertexShader*() { return injected_shader; }
-		operator const ID3D11VertexShader*() const { return injected_shader; }
-	};
-	void inject(std::shared_ptr<VertexShaderInfo> info, ID3D11ClassLinkage *pClassLinkage=nullptr) {
-		std::shared_ptr<Shader> injection_shader = injectShader(info->shader);
-		if (injection_shader) {
-			std::shared_ptr<Shader> injected_shader = Shader::merge(info->shader, injection_shader);
-			if (injected_shader) {
-				HRESULT hr = D3D11Hook::CreateVertexShader(injected_shader->data(), injected_shader->size(), pClassLinkage, &(info->injected_shader));
-				if (FAILED(hr)) {
-					LOG(WARN) << "Failed to compile injected shader " << info->shader->hash() << " : " << std::hex << hr << std::dec;
-					LOG(INFO) << info->shader->disassemble();
-					LOG(INFO) << "------------";
-					LOG(INFO) << injection_shader->disassemble();
-					LOG(INFO) << "------------";
-					LOG(INFO) << injected_shader->disassemble();
-				} else {
-					info->cbuffers = injected_shader->cbuffers();
-				}
-			} else {
-				LOG(WARN) << "Shader injection merge failed! " << info->shader->hash();
-				LOG(INFO) << info->shader->disassemble();
-				LOG(INFO) << "------------";
-				LOG(INFO) << injection_shader->disassemble();
-			}
-		}
-	}
-	std::unordered_map<ID3D11VertexShader*, std::shared_ptr<VertexShaderInfo> > vertex_shader_;
-
-	virtual HRESULT CreateVertexShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11VertexShader **ppVertexShader) {
-		TIC;
-		HRESULT r = D3D11Hook::CreateVertexShader(pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
-		if (SUCCEEDED(r)) {
-			// Create shader object
-			std::shared_ptr<VertexShaderInfo> info = std::make_shared<VertexShaderInfo>();
-			info->shader = std::make_shared<VertexShader>(ByteCode((const char *)pShaderBytecode, (const char *)pShaderBytecode + BytecodeLength));
-			vertex_shader_[*ppVertexShader] = info;
-			// Inject code if needed
-			inject(info, pClassLinkage);
-		}
-		TOC;
-		return r;
+	virtual void recordNextFrame(RecordingType type) {
+		next_recording_type = type;
 	}
 
-	typedef std::unordered_map<std::string, uint32_t> RegInfo;
-	struct PixelShaderInfo {
-		std::shared_ptr<Shader> shader;
-		ID3D11PixelShader* injected_shader = nullptr;
-		RegInfo uav, rtv;
-		std::vector<ShaderImp::Buffer> cbuffers;
-		operator ID3D11PixelShader*() { return injected_shader; }
-		operator const ID3D11PixelShader*() const { return injected_shader; }
-	};
-	void inject(std::shared_ptr<PixelShaderInfo> info, ID3D11ClassLinkage *pClassLinkage = nullptr) {
-		std::shared_ptr<Shader> injection_shader = injectShader(info->shader);
-		if (injection_shader) {
-			std::shared_ptr<Shader> injected_shader = Shader::merge(info->shader, injection_shader);
-			if (injected_shader) {
-				HRESULT hr = D3D11Hook::CreatePixelShader(injected_shader->data(), injected_shader->size(), pClassLinkage, &(info->injected_shader));
-				if (FAILED(hr)) {
-					LOG(WARN) << "Failed to compile injected shader " << info->shader->hash() << " : " << std::hex << hr << std::dec;
-					LOG(INFO) << info->shader->disassemble();
-					LOG(INFO) << "------------";
-					LOG(INFO) << injection_shader->disassemble();
-					LOG(INFO) << "------------";
-					LOG(INFO) << injected_shader->disassemble();
-				} else {
-					info->cbuffers = injected_shader->cbuffers();
-					for (const auto & s : injected_shader->sbuffers())
-						if (custom_render_targets_.count(s.name))
-							info->uav[s.name] = s.bind_point;
-
-					for (const auto & s : injected_shader->outputs()) {
-						std::string name = s.name;
-						if (custom_render_targets_.count(name))
-							info->rtv[name] = s.bind_point;
-						name = name.substr(0, name.size() - 1);
-						if (custom_render_targets_.count(name))
-							info->rtv[name] = s.bind_point;
-					}
-					if (!info->uav.size() && !info->rtv.size()) {
-						LOG(WARN) << "Injected shader does not contain any outputs, ignoring!";
-						info->injected_shader->Release();
-						info->injected_shader = nullptr;
-					}
-				}
-			} else {
-				LOG(WARN) << "Shader injection merge failed! " << info->shader->hash();
-				LOG(INFO) << info->shader->disassemble();
-				LOG(INFO) << "------------";
-				LOG(INFO) << injection_shader->disassemble();
-			}
-		}
-	}
-	std::unordered_map<ID3D11PixelShader*, std::shared_ptr<PixelShaderInfo> > pixel_shader_;
-
-
-	virtual HRESULT CreatePixelShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11PixelShader **ppPixelShader) {
-		TIC;
-		HRESULT r = D3D11Hook::CreatePixelShader(pShaderBytecode, BytecodeLength, pClassLinkage, ppPixelShader);
-		if (SUCCEEDED(r)) {
-			// Create shader object
-			std::shared_ptr<PixelShaderInfo> info = std::make_shared<PixelShaderInfo>();
-			info->shader = std::make_shared<PixelShader>(ByteCode((const char *)pShaderBytecode, (const char *)pShaderBytecode + BytecodeLength));
-			pixel_shader_[*ppPixelShader] = info;
-			// Inject code if needed
-			inject(info, pClassLinkage);
-		}
-		TOC;
-		return r;
-	}
 
 	// Post processing
-	struct PostFXShader {
-		ID3D11PixelShader* shader = nullptr;
-		RegInfo output, inputs;
-		std::vector<ShaderImp::Buffer> cbuffers;
-	};
-	std::unordered_map<ShaderHash, PostFXShader> postfx_shaders;
-	std::shared_ptr<FXShader> fx_shader;
 	virtual void callPostFx(std::shared_ptr<Shader> shader) {
 		TIC;
 		if (!postfx_shaders.count(shader->hash())) {
@@ -406,117 +638,7 @@ struct GameHook : public D3D11Hook, public IOHookHigh, public MainGameController
 		TOC;
 	}
 
-	virtual HRESULT Map(ID3D11Resource *pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE *pMappedResource) override {
-		TIC;
-		HRESULT hr = D3D11Hook::Map(pResource, Subresource, MapType, MapFlags, pMappedResource);
-		if (Subresource == 0 && MapType != D3D11_MAP_READ) {
-			memory_manager.map(pResource, pMappedResource);
-		}
-		TOC;
-		return hr;
-	}
-	virtual void Unmap(ID3D11Resource *pResource, UINT Subresource) override {
-		TIC;
-		if (Subresource == 0)
-			memory_manager.unmap(pResource);
-		D3D11Hook::Unmap(pResource, Subresource);
-		TOC;
-	}
-
-	virtual HRESULT CreateBuffer(const D3D11_BUFFER_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Buffer **ppBuffer) {
-		TIC;
-		HRESULT hr = D3D11Hook::CreateBuffer(pDesc, pInitialData, ppBuffer);
-		if (SUCCEEDED(hr) && ppBuffer && *ppBuffer && pDesc && pDesc->BindFlags | D3D11_BIND_CONSTANT_BUFFER && pDesc->ByteWidth <= 256)
-			memory_manager.cacheBuffer(*ppBuffer);
-		TOC;
-		return hr;
-	}
-
-	// Forward all the IO callbacks
-	virtual bool keyDown(unsigned char key, unsigned char special_status) {
-		// Reload keyboard shortcut (CTLR + F10)
-		if (key == VK_F10 && (special_status & 7) == CTRL)
-			reload_dlls = true;
-		return MainGameController::keyDown(key, special_status);
-	}
-	virtual bool keyUp(unsigned char key) {
-		return MainGameController::keyUp(key);
-	}
-	virtual void sendKeyDown(unsigned char key, bool syskey = false) {
-		IOHookHigh::sendKeyDown(key, syskey);
-	}
-	virtual void sendKeyUp(unsigned char key, bool syskey = false) {
-		IOHookHigh::sendKeyUp(key);
-	}
-	virtual const std::vector<uint8_t> & keyState() const {
-		return key_state;
-	}
-	virtual void sendMouseDown(float x, float y, uint8_t button) {
-		IOHookHigh::sendMouseDown(uint16_t((x + 1) / 2 * (width-1)), uint16_t((1 - y) / 2 * (height - 1)), button);
-	}
-	virtual void sendMouseUp(float x, float y, uint8_t button) {
-		IOHookHigh::sendMouseUp(uint16_t((x + 1) / 2 * (width - 1)), uint16_t((1 - y) / 2 * (height - 1)), button);
-	}
-
-	IndexHandler<ID3D11Buffer*, Buffer> buffer_id;
-	IndexHandler<ID3D11ShaderResourceView*, Texture2D> srv_id;
 	DrawInfo current_draw_info;
-
-	std::shared_ptr<PixelShaderInfo> current_pixel_shader_;
-	virtual void PSSetShader(ID3D11PixelShader *pPixelShader, ID3D11ClassInstance *const *ppClassInstances, UINT NumClassInstances) {
-		current_draw_info.pixel_shader = ShaderHash();
-		current_pixel_shader_.reset();
-		auto i = pixel_shader_.find(pPixelShader);
-		if (i != pixel_shader_.end()) {
-			current_pixel_shader_ = i->second;
-			current_draw_info.pixel_shader = current_pixel_shader_->shader->hash();
-		}
-		D3D11Hook::PSSetShader(pPixelShader, ppClassInstances, NumClassInstances);
-	}
-	std::shared_ptr<VertexShaderInfo> current_vertex_shader_;
-	virtual void VSSetShader(ID3D11VertexShader *pVertexShader, ID3D11ClassInstance *const *ppClassInstances, UINT NumClassInstances) {
-		current_draw_info.vertex_shader = ShaderHash();
-		current_vertex_shader_.reset();
-		auto i = vertex_shader_.find(pVertexShader);
-		if (i != vertex_shader_.end()) {
-			current_vertex_shader_ = i->second;
-			current_draw_info.vertex_shader = current_vertex_shader_->shader->hash();
-		}
-		D3D11Hook::VSSetShader(pVertexShader, ppClassInstances, NumClassInstances);
-	}
-
-	virtual void PSSetShaderResources(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView *const *ppShaderResourceViews) {
-		if (StartSlot == 0)
-			current_draw_info.texture_id = srv_id(ppShaderResourceViews[0]);
-		D3D11Hook::PSSetShaderResources(StartSlot, NumViews, ppShaderResourceViews);
-	}
-	virtual void IASetVertexBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppVertexBuffers, const UINT *pStrides, const UINT *pOffsets) {
-		if (StartSlot == 0)
-			current_draw_info.vertex_buffer = buffer_id(ppVertexBuffers[0]);
-		D3D11Hook::IASetVertexBuffers(StartSlot, NumBuffers, ppVertexBuffers, pStrides, pOffsets);
-	}
-	virtual void IASetIndexBuffer(ID3D11Buffer *pIndexBuffer, DXGI_FORMAT Format, UINT Offset) {
-		current_draw_info.index_buffer = buffer_id(pIndexBuffer);
-		D3D11Hook::IASetIndexBuffer(pIndexBuffer, Format, Offset);
-	}
-	virtual std::shared_ptr<GPUMemory> readBuffer(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate) {
-		TIC;
-		std::shared_ptr<GPUMemory> r;
-		ID3D11Buffer * bf = buffer_id(b);
-		if (bf)
-			r = memory_manager.read(bf, offset, n, immediate);
-		TOC;
-		return r;
-	}
-	virtual size_t bufferSize(Buffer b) {
-		ID3D11Buffer * bf = buffer_id(b);
-		D3D11_BUFFER_DESC d;
-		bf->GetDesc(&d);
-		return d.ByteWidth;
-	}
-	virtual std::string getGameState() const override {
-		return gameState();
-	}
 
 	IndexHandler<ID3D11DepthStencilView*, DepthStencilView> dsv_id;
 	IndexHandler<ID3D11RenderTargetView*, RenderTargetView> rtv_id;
@@ -546,22 +668,6 @@ struct GameHook : public D3D11Hook, public IOHookHigh, public MainGameController
 			last_UnorderedAccessViews = std::vector<ID3D11UnorderedAccessView *>(ppUnorderedAccessViews, ppUnorderedAccessViews+NumUAVs);
 		D3D11Hook::OMSetRenderTargetsAndUnorderedAccessViews(NumRTVs, ppRenderTargetViews, pDepthStencilView, UAVStartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
 		TOC;
-	}
-	virtual void PSSetConstantBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers) {
-		buffer_id(current_draw_info.ps_cbuffers, ppConstantBuffers, NumBuffers, StartSlot);
-		D3D11Hook::PSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
-	}
-	virtual void PSSetConstantBuffers1(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers, const UINT *pFirstConstant, const UINT *pNumConstants) {
-		LOG(ERR) << "Cannot intercept 'PSSetConstantBuffers1'";
-		D3D11Hook::PSSetConstantBuffers1(StartSlot, NumBuffers, ppConstantBuffers, pFirstConstant, pNumConstants);
-	}
-	virtual void VSSetConstantBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers) {
-		buffer_id(current_draw_info.vs_cbuffers, ppConstantBuffers, NumBuffers, StartSlot);
-		D3D11Hook::VSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
-	}
-	virtual void VSSetConstantBuffers1(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppConstantBuffers, const UINT *pFirstConstant, const UINT *pNumConstants) {
-		LOG(ERR) << "Cannot intercept 'VSSetConstantBuffers1'";
-		D3D11Hook::VSSetConstantBuffers1(StartSlot, NumBuffers, ppConstantBuffers, pFirstConstant, pNumConstants);
 	}
 
 	// Render state for injection

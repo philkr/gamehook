@@ -52,9 +52,9 @@ void IOHookHigh::sendMouse(uint16_t x, uint16_t y, uint8_t button, UINT msg_o) {
 	if (button == 1)
 		msg = WM_LBUTTONDOWN;
 	else if (button == 2)
-		msg = WM_LBUTTONDOWN;
+		msg = WM_RBUTTONDOWN;
 	else if (button == 3)
-		msg = WM_LBUTTONDOWN;
+		msg = WM_MBUTTONDOWN;
 	else LOG(WARN) << "Unknown mouse button " << button;
 	if (msg)
 		wndProc(msg + msg_o, 0, MAKELPARAM(x, y));
@@ -80,14 +80,14 @@ LRESULT IOHookHigh::wndProc(UINT uMsg, WPARAM wParam, LPARAM lParam) {
 				bool state_switch = !(lParam & (1 << 30));
 
 				unsigned char special_state = (CTRL*key_state[VK_CONTROL]) | (SHIFT*key_state[VK_SHIFT]) | (ALT*key_state[VK_MENU]) | (SWITCH*state_switch);
-				if ((wParam < VK_SHIFT || wParam > VK_MENU) && keyDown(wParam, special_state))
+				if ((wParam < VK_SHIFT || wParam > VK_MENU) && handleKeyDown(wParam, special_state))
 					return 0;
 			}
 		}
 		else if (uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP) {
 			if (0 < wParam && wParam < 255) {
 				key_state[wParam] = UP;
-				if ((wParam < VK_SHIFT || wParam > VK_MENU) && keyUp(wParam))
+				if ((wParam < VK_SHIFT || wParam > VK_MENU) && handleKeyUp(wParam))
 					return 0;
 			}
 		}

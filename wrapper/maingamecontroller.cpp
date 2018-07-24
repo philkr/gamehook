@@ -10,6 +10,8 @@ MainGameController::MainGameController() {
 }
 
 void MainGameController::clearControllers() {
+	for (auto c : controllers_)
+		c->onClose();
 	controllers_.clear();
 }
 
@@ -22,7 +24,7 @@ void MainGameController::startControllers() {
 			controllers_.push_back(c);
 	}
 	for (auto c : controllers_) {
-		c->initialize();
+		c->onInitialize();
 		initController(c);
 	}
 }
@@ -79,11 +81,11 @@ template<typename ...Args> RecordingType callController(const std::vector<std::s
 		r |= (uint32_t)(c.get()->*f)(args...);
 	return (RecordingType)r;
 }
-bool MainGameController::keyDown(unsigned char key, unsigned char special_status) {
-	return callControllerReturn(controllers_, &GameController::keyDown, key, special_status);
+bool MainGameController::onKeyDown(unsigned char key, unsigned char special_status) {
+	return callControllerReturn(controllers_, &GameController::onKeyDown, key, special_status);
 }
-bool MainGameController::keyUp(unsigned char key) {
-	return callControllerReturn(controllers_, &GameController::keyUp, key);
+bool MainGameController::onKeyUp(unsigned char key) {
+	return callControllerReturn(controllers_, &GameController::onKeyUp, key);
 }
 std::string TN(const std::string & s) { return s; }
 std::string TN(const ProvidedTarget & s) { return s.name; }
@@ -122,7 +124,7 @@ std::vector<ProvidedTarget> MainGameController::providedCustomTargets(std::share
 std::string MainGameController::gameState() const {
 	std::string r = "{";
 	for (auto c : controllers_) {
-		std::string s = strip(c->gameState());
+		std::string s = strip(c->provideGameState());
 		if (s.size() > 2) {
 			if (r.size() > 1) r += ",";
 			r += s.substr(1, s.size() - 2);
@@ -130,34 +132,34 @@ std::string MainGameController::gameState() const {
 	}
 	return r + "}";
 }
-void MainGameController::sendCommand(const std::string &s) {
+void MainGameController::command(const std::string &s) {
 	for (auto c : controllers_)
-		c->command(s);
+		c->onCommand(s);
 }
-RecordingType MainGameController::recordFrame(uint32_t frame_id) {
-	return callController(controllers_, &GameController::recordFrame, frame_id);
+void MainGameController::onBeginFrame(uint32_t frame_id) {
+	return callController(controllers_, &GameController::onBeginFrame, frame_id);
 }
-void MainGameController::startFrame(uint32_t frame_id) {
-	return callController(controllers_, &GameController::startFrame, frame_id);
+void MainGameController::onPostProcess(uint32_t frame_id) {
+	callController(controllers_, &GameController::onPostProcess, frame_id);
 }
-void MainGameController::postProcess(uint32_t frame_id) {
-	callController(controllers_, &GameController::postProcess, frame_id);
+void MainGameController::onEndFrame(uint32_t frame_id) {
+	callController(controllers_, &GameController::onEndFrame, frame_id);
 }
-void MainGameController::endFrame(uint32_t frame_id) {
-	callController(controllers_, &GameController::endFrame, frame_id);
+void MainGameController::onPresent(uint32_t frame_id) {
+	callController(controllers_, &GameController::onPresent, frame_id);
 }
-DrawType MainGameController::startDraw(const DrawInfo & i) {
-	return callController<DrawType, const DrawInfo &>(controllers_, &GameController::startDraw, i);
-}
-
-void MainGameController::endDraw(const DrawInfo & i) {
-	callController<const DrawInfo &>(controllers_, &GameController::endDraw, i);
+void MainGameController::onBeginDraw(const DrawInfo & i) {
+	callController<const DrawInfo &>(controllers_, &GameController::onBeginDraw, i);
 }
 
-std::shared_ptr<Shader> MainGameController::injectShader(std::shared_ptr<Shader> shader) {
-	return callController<std::shared_ptr<Shader>, std::shared_ptr<Shader>>(controllers_, &GameController::injectShader, shader);
+void MainGameController::onEndDraw(const DrawInfo & i) {
+	callController<const DrawInfo &>(controllers_, &GameController::onEndDraw, i);
 }
 
-bool MainGameController::stop() {
-	return callControllerAll(controllers_, &GameController::stop);
+void MainGameController::onCreateShader(std::shared_ptr<Shader> shader) {
+	callController(controllers_, &GameController::onCreateShader, shader);
+}
+
+void MainGameController::onBindShader(std::shared_ptr<Shader> shader) {
+	callController(controllers_, &GameController::onBindShader, shader);
 }

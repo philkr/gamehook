@@ -84,6 +84,12 @@
     <ClInclude Include="..\SDK\json.h">
       <Filter>SDK</Filter>
     </ClInclude>
+    <ClInclude Include="..\SDK\shader.h">
+      <Filter>SDK</Filter>
+    </ClInclude>
+    <ClInclude Include="..\SDK\types.h">
+      <Filter>SDK</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dx11.cpp">

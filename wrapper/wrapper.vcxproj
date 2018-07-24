@@ -151,6 +151,8 @@
     <ClInclude Include="..\SDK\json.h" />
     <ClInclude Include="..\SDK\log.h" />
     <ClInclude Include="..\SDK\sdk.h" />
+    <ClInclude Include="..\SDK\shader.h" />
+    <ClInclude Include="..\SDK\types.h" />
     <ClInclude Include="api.h" />
     <ClInclude Include="cbuffer.h" />
     <ClInclude Include="config\config.h" />

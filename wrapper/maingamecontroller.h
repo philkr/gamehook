@@ -15,21 +15,24 @@ public:
 
 
 	// Implements the main game controller (a dispatcher of all custom controllers)
-	virtual void sendKeyDown(unsigned char key, bool syskey = false) = 0;
-	virtual void sendKeyUp(unsigned char key, bool syskey = false) = 0;
+	virtual void keyDown(unsigned char key, bool syskey = false) = 0;
+	virtual void keyUp(unsigned char key, bool syskey = false) = 0;
 	virtual const std::vector<uint8_t> & keyState() const = 0;
 
 	// Callbacks
-	virtual bool keyDown(unsigned char key, unsigned char special_status);
-	virtual bool keyUp(unsigned char key);
-	virtual RecordingType recordFrame(uint32_t frame_id) override;
-	virtual void startFrame(uint32_t frame_id) override;
-	virtual void endFrame(uint32_t frame_id) override;
-	virtual void postProcess(uint32_t frame_id) override;
-	virtual DrawType startDraw(const DrawInfo & i) override;
-	virtual void endDraw(const DrawInfo & i) override;
-	virtual std::shared_ptr<Shader> injectShader(std::shared_ptr<Shader> shader) override;
-	virtual bool stop() override;
+	virtual bool onKeyDown(unsigned char key, unsigned char special_status);
+	virtual bool onKeyUp(unsigned char key);
+
+	virtual void onBeginFrame(uint32_t frame_id) final;
+	virtual void onPostProcess(uint32_t frame_id) final;
+	virtual void onEndFrame(uint32_t frame_id) final;
+	virtual void onPresent(uint32_t frame_id) final;
+
+	virtual void onBeginDraw(const DrawInfo & i) final;
+	virtual void onEndDraw(const DrawInfo & i) final;
+
+	virtual void onCreateShader(std::shared_ptr<Shader> shader) final;
+	virtual void onBindShader(std::shared_ptr<Shader> shader) final;
 
 	// Other functions
 	virtual std::vector<ProvidedTarget> providedTargets() const override;
@@ -41,6 +44,5 @@ public:
 	virtual std::string gameState() const final;
 
 	// Send command function
-	virtual void sendCommand(const std::string &s) final;
+	virtual void command(const std::string &s) final;
 };
-
