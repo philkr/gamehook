@@ -28,11 +28,13 @@ struct IOHookHigh : public IOHook {
 	};
 	std::vector<uint8_t> key_state;
 
+	void sendKey(unsigned char key, unsigned char up);
+
 	// Handle key down and up events (return true to swallow)
 	virtual bool handleKeyDown(unsigned char key, unsigned char special_status) = 0;
 	virtual bool handleKeyUp(unsigned char key) = 0;
-	virtual void sendKeyDown(unsigned char key, bool syskey=false);
-	virtual void sendKeyUp(unsigned char key, bool syskey = false);
+	virtual void sendKeyDown(unsigned char key);
+	virtual void sendKeyUp(unsigned char key);
 	virtual void sendMouse(uint16_t x, uint16_t y, uint8_t button, UINT o);
 	virtual void sendMouseDown(uint16_t x, uint16_t y, uint8_t button);
 	virtual void sendMouseUp(uint16_t x, uint16_t y, uint8_t button);

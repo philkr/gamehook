@@ -45,8 +45,8 @@ struct BasePythonController {
 	/****** Commands ******/
 	void buildShader(const std::shared_ptr<Shader> shader);
 	void bindShader(const std::shared_ptr<Shader> shader);
-	void keyDown(unsigned char key, bool syskey = false);
-	void keyUp(unsigned char key, bool syskey = false);
+	void keyDown(unsigned char key);
+	void keyUp(unsigned char key);
 	const std::vector<uint8_t> & keyState() const;
 	void mouseDown(float x, float y, uint8_t button);
 	void mouseUp(float x, float y, uint8_t button);
@@ -371,9 +371,51 @@ py::scoped_interpreter interpreter;
 py::gil_scoped_release release__; // Let's not hold the interpreter by default (instead acquire it whenever needed)
 
 struct PythonController : public GameController {
+	struct Controller {
+		py::object c;
+		py::object on_initialize;
+		py::object on_close;
+		py::object on_key_down;
+		py::object on_key_up;
+		py::object on_begin_frame;
+		py::object on_post_process;
+		py::object on_end_frame;
+		py::object on_present;
+		py::object on_begin_draw;
+		py::object on_end_draw;
+		py::object on_create_shader;
+		py::object on_bind_shader;
+		py::object on_command;
+		py::object provide_game_state;
+		py::object fetch(const char * n) {
+			try {
+				if (py::hasattr(c, n))
+					return c.attr(n);
+			} catch (py::error_already_set e) {
+				LOG(WARN) << e.what();
+			}
+			return py::object();
+		}
+		Controller(py::object c) :c(c) {
+			on_initialize = fetch("on_initialize");
+			on_close = fetch("on_close");
+			on_key_down = fetch("on_key_down");
+			on_key_up = fetch("on_key_up");
+			on_begin_frame = fetch("on_begin_frame");
+			on_post_process = fetch("on_post_process");
+			on_end_frame = fetch("on_end_frame");
+			on_present = fetch("on_present");
+			on_begin_draw = fetch("on_begin_draw");
+			on_end_draw = fetch("on_end_draw");
+			on_create_shader = fetch("on_create_shader");
+			on_bind_shader = fetch("on_bind_shader");
+			on_command = fetch("on_command");
+			provide_game_state = fetch("provide_game_state");
+		}
+	};
 	std::vector<py::module> modules;
 	bool controllers_loaded = false;
-	std::vector<py::object> controllers;
+	std::vector<Controller> controllers;
 	void loadModules(std::string dir = ".") {
 		py::gil_scoped_acquire acquire;
 		modules.clear();
@@ -420,13 +462,12 @@ struct PythonController : public GameController {
 				for (auto c : mb) {
 					py::object cls = py::cast<py::tuple>(c)[1];
 					if (py::cast<bool>(inspect.attr("isclass")(cls)) && PyObject_IsSubclass(cls.ptr(), base_controller.ptr()))
-						controllers.push_back(cls(PythonControllerRef(this)));
+						controllers.push_back(Controller(cls(PythonControllerRef(this))));
 				}
 			}
 		}
 	}
 	void unloadAllControllers() {
-		callAll("unload");
 		py::gil_scoped_acquire acquire;
 		controllers.clear();
 		controllers_loaded = false;
@@ -440,40 +481,38 @@ struct PythonController : public GameController {
 		gc.attr("collect")();
 	}
 	void reloadAllModules() {
-		unloadAllControllers();
-		unloadAllModules();
-		loadAllModules();
-		loadAllControllers();
+		onClose();
+		onInitialize();
 	}
-	template<typename T, typename ...ARGS> T callAll(const char * fname, ARGS... args) {
-		py::gil_scoped_acquire acquire;
-		T r = (T)0;
-		for (auto c : controllers)
-			if (py::hasattr(c, fname)) {
-				try {
-					py::object fn = c.attr(fname);
-					if (!fn.is_none()) {
-						try {
-							T rr = py::cast<T>(fn(args...));
-							if (rr) r = rr;
-						} catch (py::error_already_set e) {
-							LOG(WARN) << "Failed to call function " << e.what();
-						} catch (py::reference_cast_error e) {
-							LOG(WARN) << "Failed to cast return value " << e.what();
-						}
+	template<typename T, typename ...ARGS> T callAll(py::object Controller::* func, ARGS... args) {
+		try {
+			py::gil_scoped_acquire acquire;
+			T r = (T)0;
+			for (auto c : controllers) {
+				py::object fn = c.*func;
+				if (fn && !fn.is_none()) {
+					try {
+						T rr = py::cast<T>(fn(args...));
+						if (rr) r = rr;
+					} catch (py::error_already_set e) {
+						LOG(WARN) << "Failed to call function " << e.what();
+					} catch (py::reference_cast_error e) {
+						LOG(WARN) << "Failed to cast return value " << e.what();
 					}
-				} catch (py::error_already_set e) {
-					LOG(WARN) << e.what();
 				}
 			}
-		return r;
+			return r;
+		} catch (py::error_already_set e) {
+			LOG(WARN) << "Failed to callAll " << e.what();
+			return 0;
+		}
 	}
-	template<typename ...ARGS> void callAll(const char * fname, ARGS... args) {
-		py::gil_scoped_acquire acquire;
-		for (auto c : controllers)
-			if (py::hasattr(c, fname)) {
-				py::object fn = c.attr(fname);
-				if (!fn.is_none()) {
+	template<typename ...ARGS> void callAll(py::object Controller::* func, ARGS... args) {
+		try {
+			py::gil_scoped_acquire acquire;
+			for (auto c : controllers) {
+				py::object fn = c.*func;
+				if (fn && !fn.is_none()) {
 					try {
 						fn(args...);
 					} catch (py::error_already_set e) {
@@ -481,68 +520,68 @@ struct PythonController : public GameController {
 					}
 				}
 			}
+		} catch (py::error_already_set e) {
+			LOG(WARN) << "Failed to callAll " << e.what();
+		}
 	}
 	virtual void onInitialize() final {
 		loadAllModules();
 		loadAllControllers();
-		callAll("on_initialize");
+		callAll(&Controller::on_initialize);
 	}
 	virtual void onClose() final {
-		callAll("on_close");
+		callAll(&Controller::on_close);
 		unloadAllControllers();
 		unloadAllModules();
 	}
 	virtual bool onKeyDown(unsigned char key, unsigned char special_status) final {
 		if (key == VK_F11) reloadAllModules();
-		return callAll<bool>("on_key_down", key, special_status);
+		return callAll<bool>(&Controller::on_key_down, key, special_status);
 	}
 	virtual bool onKeyUp(unsigned char key) final {
-		return callAll<bool>("on_key_up", key);
+		return callAll<bool>(&Controller::on_key_up, key);
 	}
 	virtual void onBeginFrame(uint32_t frame_id) final {
-		callAll("on_begin_frame", frame_id);
+		callAll(&Controller::on_begin_frame, frame_id);
 	}
 	virtual void onPostProcess(uint32_t frame_id) final {
-		callAll("on_post_process", frame_id);
+		callAll(&Controller::on_post_process, frame_id);
 	}
 	virtual void onEndFrame(uint32_t frame_id) final {
-		callAll("on_end_frame", frame_id);
+		callAll(&Controller::on_end_frame, frame_id);
 	}
 	virtual void onPresent(uint32_t frame_id) final {
-		callAll("on_present", frame_id);
+		callAll(&Controller::on_present, frame_id);
 	}
 	virtual void onBeginDraw(const DrawInfo & i) final {
-		callAll("on_begin_draw", i);
+		callAll(&Controller::on_begin_draw, i);
 	}
 	virtual void onEndDraw(const DrawInfo & i) final {
-		callAll("on_end_draw", i);
+		callAll(&Controller::on_end_draw, i);
 	}
 	virtual void onCreateShader(std::shared_ptr<Shader> shader) final {
-		callAll("on_create_shader", shader);
+		callAll(&Controller::on_create_shader, shader);
 	}
 	virtual void onBindShader(std::shared_ptr<Shader> shader) final {
-		callAll("on_bind_shader", shader);
+		callAll(&Controller::on_bind_shader, shader);
 	}
 	virtual void onCommand(const std::string & json) final {
-		callAll("on_command", json);
+		callAll(&Controller::on_command, json);
 	}
 	virtual std::string provideGameState() const final {
 		py::gil_scoped_acquire acquire;
 		std::string r = "{";
 		for (auto c : controllers)
-			if (py::hasattr(c, "provide_game_state")) {
-				py::object gs = c.attr("provide_game_state");
-				if (!gs.is_none()) {
-					if (r.size() > 1) r += ",";
-					std::string rr;
-					{
-						rr = (std::string)py::str(gs());
-					}
-					if (rr.size() && rr[0] == '{' && rr[rr.size() - 1] == '}')
-						rr = rr.substr(1, rr.size() - 2);
-					if (rr.size())
-						r += rr;
+			if (c.provide_game_state && !c.provide_game_state.is_none()) {
+				if (r.size() > 1) r += ",";
+				std::string rr;
+				{
+					rr = (std::string)py::str(c.provide_game_state());
 				}
+				if (rr.size() && rr[0] == '{' && rr[rr.size() - 1] == '}')
+					rr = rr.substr(1, rr.size() - 2);
+				if (rr.size())
+					r += rr;
 			}
 		return r + "}";
 	}
@@ -552,8 +591,8 @@ REGISTER_CONTROLLER(PythonController);
 
 void BasePythonController::buildShader(const std::shared_ptr<Shader> shader) { main_->buildShader(shader); }
 void BasePythonController::bindShader(const std::shared_ptr<Shader> shader) { main_->bindShader(shader); }
-void BasePythonController::keyDown(unsigned char key, bool syskey) { main_->keyDown(key, syskey); }
-void BasePythonController::keyUp(unsigned char key, bool syskey) { main_->keyUp(key, syskey); }
+void BasePythonController::keyDown(unsigned char key) { main_->keyDown(key); }
+void BasePythonController::keyUp(unsigned char key) { main_->keyUp(key); }
 const std::vector<uint8_t> & BasePythonController::keyState() const { return main_->keyState(); }
 void BasePythonController::mouseDown(float x, float y, uint8_t button) { main_->mouseDown(x, y, button); }
 void BasePythonController::mouseUp(float x, float y, uint8_t button) { main_->mouseUp(x, y, button); }

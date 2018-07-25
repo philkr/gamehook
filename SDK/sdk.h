@@ -186,8 +186,8 @@ public:
 
 	/******* IO *******/
 	// IO Control functions (not not override unless you know what you're doing!)
-	virtual void keyDown(unsigned char key, bool syskey = false) = 0;
-	virtual void keyUp(unsigned char key, bool syskey = false) = 0;
+	virtual void keyDown(unsigned char key) = 0;
+	virtual void keyUp(unsigned char key) = 0;
 	virtual const std::vector<uint8_t> & keyState() const = 0;
 	// Button:   0: WM_MOUSEMOVE (down only), 1:WM_LBUTTON, 2:WM_RBUTTON, 3:WM_MBUTTON
 	virtual void mouseDown(float x, float y, uint8_t button) = 0;
@@ -264,8 +264,8 @@ public:
 	virtual void buildShader(const std::shared_ptr<Shader> shader) { main_->buildShader(shader); }
 	virtual void bindShader(const std::shared_ptr<Shader> shader) { main_->bindShader(shader); }
 
-	virtual void keyDown(unsigned char key, bool syskey = false) final { main_->keyDown(key, syskey); }
-	virtual void keyUp(unsigned char key, bool syskey = false) final { main_->keyUp(key, syskey); }
+	virtual void keyDown(unsigned char key) final { main_->keyDown(key); }
+	virtual void keyUp(unsigned char key) final { main_->keyUp(key); }
 	virtual const std::vector<uint8_t> & keyState() const final { return main_->keyState(); }
 	virtual void mouseDown(float x, float y, uint8_t button) final { main_->mouseDown(x, y, button); }
 	virtual void mouseUp(float x, float y, uint8_t button) final { main_->mouseUp(x, y, button); }

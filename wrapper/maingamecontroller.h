@@ -13,12 +13,6 @@ public:
 	virtual void clearControllers();
 	virtual void startControllers();
 
-
-	// Implements the main game controller (a dispatcher of all custom controllers)
-	virtual void keyDown(unsigned char key, bool syskey = false) = 0;
-	virtual void keyUp(unsigned char key, bool syskey = false) = 0;
-	virtual const std::vector<uint8_t> & keyState() const = 0;
-
 	// Callbacks
 	virtual bool onKeyDown(unsigned char key, unsigned char special_status);
 	virtual bool onKeyUp(unsigned char key);

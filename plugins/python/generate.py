@@ -60,9 +60,24 @@ for f in callbacks:
 	ret = 'return '
 	if 'void ' in f: ret = ''
 	print( '\tvirtual %s final {'%f )
-	print( '\t\t%scallAll("%s"%s);'%(ret, underscore(fn_r.search(f).group(1)), ', '.join(['']+args)) )
+	print( '\t\t%scallAll(&Controller::%s%s);'%(ret, underscore(fn_r.search(f).group(1)), ', '.join(['']+args)) )
 	print( '\t}' )
+
+print()
+print()
+print( '-'*10, 'cb def', '-'*10)
+fn_r = re.compile(' (\w*)\(')
+for f in callbacks:
+	print( '\tpy::object %s;'%underscore(fn_r.search(f).group(1)))
 	
+print()
+print()
+print( '-'*10, 'cb dec', '-'*10)
+fn_r = re.compile(' (\w*)\(')
+for f in callbacks:
+	fn = underscore(fn_r.search(f).group(1))
+	print( '\t%s = fetch("%s");'%(fn,fn))
+
 print()
 print()
 print( '-'*10, 'base decl', '-'*10)

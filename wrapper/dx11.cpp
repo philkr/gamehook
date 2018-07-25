@@ -114,10 +114,10 @@ struct GameHookIO : virtual public IOHookHigh, virtual public MainGameController
 		return onKeyUp(key);
 	}
 	// GameController -> IOHookHigh
-	virtual void keyDown(unsigned char key, bool syskey = false) {
-		IOHookHigh::sendKeyDown(key, syskey);
+	virtual void keyDown(unsigned char key) {
+		IOHookHigh::sendKeyDown(key);
 	}
-	virtual void keyUp(unsigned char key, bool syskey = false) {
+	virtual void keyUp(unsigned char key) {
 		IOHookHigh::sendKeyUp(key);
 	}
 	virtual const std::vector<uint8_t> & keyState() const {
