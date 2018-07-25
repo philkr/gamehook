@@ -78,3 +78,22 @@ for f in functions:
 	ret = 'return '
 	if 'void ' in f: ret = ''
 	print( '%s { %smain_->%s(%s); }'%(re.sub(' *= .*?([,)])', '\\1', f.replace(fn, 'BasePythonController::'+fn)), ret, fn, ', '.join(args)) )
+	
+print()
+print()
+print( '-'*10, 'cmd decl', '-'*10)
+map_name_cnt = {}
+for f in functions:
+	args = parse_args(f)
+	fn = fn_r.search(f).group(1)
+	p_fn = underscore(fn)
+	if fn in map_name_cnt:
+		map_name_cnt[fn] += 1
+		fn = fn+'_%s'%map_name_cnt[fn]
+	else:
+		map_name_cnt[fn] = 0
+
+	df = '.def'
+	if len(args) == 0:
+		df = '.def_property_readonly'
+	print( '\t\t%s("%s", &BasePythonController::%s, py::call_guard<py::gil_scoped_release>())'%(df, p_fn, fn))

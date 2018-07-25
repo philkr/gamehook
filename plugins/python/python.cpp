@@ -90,7 +90,8 @@ std::string arg2str(py::args a) {
 		r += (i?" ":"") + (std::string)py::str(a[i]);
 	return r;
 }
-PYBIND11_EMBEDDED_MODULE(api, m) {
+template<typename T>
+void wrapType(T m) {
 	py::enum_<RecordingType>(m, "RecordingType")
 		.value("NONE", RecordingType::NONE)
 		.value("DRAW", RecordingType::DRAW)
@@ -230,14 +231,68 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 		.value("UNBIND", BindTarget::UNBIND);
 
 	py::enum_<DataType>(m, "DataType")
-		.value("DT_UINT8", DataType::DT_UINT8)
-		.value("DT_UINT16", DataType::DT_UINT16)
-		.value("DT_UINT32", DataType::DT_UINT32)
-		.value("DT_FLOAT", DataType::DT_FLOAT)
-		.value("DT_HALF", DataType::DT_HALF)
-		.value("DT_UNKNOWN", DataType::DT_UNKNOWN);
+		.value("UINT8", DataType::DT_UINT8)
+		.value("UINT16", DataType::DT_UINT16)
+		.value("UINT32", DataType::DT_UINT32)
+		.value("FLOAT", DataType::DT_FLOAT)
+		.value("HALF", DataType::DT_HALF)
+		.value("UNKNOWN", DataType::DT_UNKNOWN);
 
 	m.def("data_size", dataSize);
+}
+
+template<typename T>
+void wrapShader(T m) {
+	py::class_<ShaderHash>(m, "ShaderHash", py::buffer_protocol())
+		.def_buffer([](ShaderHash &h) -> py::buffer_info {
+			return py::buffer_info(
+				h.h,                                    /* Pointer to buffer */
+				sizeof(uint32_t),                         /* Size of one scalar */
+				py::format_descriptor<uint32_t>::format(),/* Python struct-style format descriptor */
+				1,                                      /* Number of dimensions */
+				{ 4 },                                  /* Buffer dimensions */
+				{ sizeof(uint32_t) }                      /* Strides (in bytes) for each index */
+			);
+		});
+
+
+	py::class_<Shader, std::shared_ptr<Shader>> c(m, "Shader");
+	py::enum_<Shader::Type>(c, "Type")
+		.value("UNKNOWN", Shader::Type::UNKNOWN)
+		.value("VERTEX", Shader::Type::VERTEX)
+		.value("PIXEL", Shader::Type::PIXEL)
+		.value("COMPUTE", Shader::Type::COMPUTE);
+
+	py::class_<Shader::Buffer>(c, "Buffer")
+		.def_readonly("name", &Shader::Buffer::name)
+		.def_readonly("bind_point", &Shader::Buffer::bind_point);
+
+	py::class_<Shader::Binding>(c, "Binding")
+		.def_readonly("name", &Shader::Binding::name)
+		.def_readonly("bind_point", &Shader::Binding::bind_point);
+
+	c
+		.def_static("create", &Shader::create)
+		.def("append", &Shader::append, py::call_guard<py::gil_scoped_release>())
+//		.def("subset", Shader::subset, py::call_guard<py::gil_scoped_release>())
+		.def("renameCBuffer", &Shader::renameCBuffer, py::call_guard<py::gil_scoped_release>())
+		.def("renameOutput", &Shader::renameOutput, py::call_guard<py::gil_scoped_release>())
+		.def("disassemble", &Shader::disassemble, py::call_guard<py::gil_scoped_release>())
+
+		.def_property_readonly("type", &Shader::type, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("hash", &Shader::hash, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("inputs", &Shader::inputs, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("outputs", &Shader::outputs, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("cbuffers", &Shader::cbuffers, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("sbuffers", &Shader::sbuffers, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("textures", &Shader::textures, py::call_guard<py::gil_scoped_release>())
+		.def("data", [](std::shared_ptr<Shader> ths) {return ByteCode(ths->data(), ths->data()+ths->size());})
+		;
+}
+
+PYBIND11_EMBEDDED_MODULE(api, m) {
+	wrapType(m);
+	wrapShader(m);
 
 	py::class_<PythonControllerRef>(m, "__PythonControllerRef");
 
@@ -248,25 +303,43 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 
 	py::class_<BasePythonController>(m, "BaseController")
 		.def(py::init<PythonControllerRef>())
+		.def("build_shader", &BasePythonController::buildShader, py::call_guard<py::gil_scoped_release>())
+		.def("bind_shader", &BasePythonController::bindShader, py::call_guard<py::gil_scoped_release>())
+		.def("key_down", &BasePythonController::keyDown, py::call_guard<py::gil_scoped_release>())
+		.def("key_up", &BasePythonController::keyUp, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("key_state", &BasePythonController::keyState, py::call_guard<py::gil_scoped_release>())
+		.def("mouse_down", &BasePythonController::mouseDown, py::call_guard<py::gil_scoped_release>())
+		.def("mouse_up", &BasePythonController::mouseUp, py::call_guard<py::gil_scoped_release>())
+		.def("record_next_frame", &BasePythonController::recordNextFrame, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("current_recording_type", &BasePythonController::currentRecordingType, py::call_guard<py::gil_scoped_release>())
+		.def("hide_draw", &BasePythonController::hideDraw, py::call_guard<py::gil_scoped_release>())
 		.def("copy_target", &BasePythonController::copyTarget, py::call_guard<py::gil_scoped_release>())
+		.def("copy_target", &BasePythonController::copyTarget_1, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("list_targets", &BasePythonController::listTargets, py::call_guard<py::gil_scoped_release>())
 		.def("target_type", &BasePythonController::targetType, py::call_guard<py::gil_scoped_release>())
 		.def("has_target", &BasePythonController::hasTarget, py::call_guard<py::gil_scoped_release>())
-		.def_property_readonly("targets", &BasePythonController::listTargets, py::call_guard<py::gil_scoped_release>())
+		.def("target_available", &BasePythonController::targetAvailable, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("default_width", &BasePythonController::defaultWidth, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("default_height", &BasePythonController::defaultHeight, py::call_guard<py::gil_scoped_release>())
+		.def("request_output", &BasePythonController::requestOutput, py::call_guard<py::gil_scoped_release>())
+		.def("request_output", &BasePythonController::requestOutput_1, py::call_guard<py::gil_scoped_release>())
+		.def("output_type", &BasePythonController::outputType, py::call_guard<py::gil_scoped_release>())
+		.def("output_channels", &BasePythonController::outputChannels, py::call_guard<py::gil_scoped_release>())
+		.def("read_target", &BasePythonController::readTarget, py::call_guard<py::gil_scoped_release>())
+		.def("read_target", &BasePythonController::readTarget_1, py::call_guard<py::gil_scoped_release>())
+		.def("read_target", &BasePythonController::readTarget_2, py::call_guard<py::gil_scoped_release>())
+		.def("read_target", &BasePythonController::readTarget_3, py::call_guard<py::gil_scoped_release>())
+		.def("read_target", &BasePythonController::readTarget_4, py::call_guard<py::gil_scoped_release>())
+		.def("read_target", &BasePythonController::readTarget_5, py::call_guard<py::gil_scoped_release>())
+		.def("read_buffer", &BasePythonController::readBuffer, py::call_guard<py::gil_scoped_release>())
+		.def("read_buffer", &BasePythonController::readBuffer_1, py::call_guard<py::gil_scoped_release>())
+		.def("read_buffer", &BasePythonController::readBuffer_2, py::call_guard<py::gil_scoped_release>())
+		.def("buffer_size", &BasePythonController::bufferSize, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("game_state", &BasePythonController::gameState, py::call_guard<py::gil_scoped_release>())
 		.def("command", &BasePythonController::command, py::call_guard<py::gil_scoped_release>())
-		//.def("record_frame", &BasePythonController::recordFrame, py::call_guard<py::gil_scoped_release>())
-		//.def("start_frame", &BasePythonController::startFrame, py::call_guard<py::gil_scoped_release>())
-		//.def("post_process", &BasePythonController::postProcess, py::call_guard<py::gil_scoped_release>())
-		//.def("end_frame", &BasePythonController::endFrame, py::call_guard<py::gil_scoped_release>())
-		//.def("start_draw", &BasePythonController::startDraw, py::call_guard<py::gil_scoped_release>())
-		//.def("end_draw", &BasePythonController::endDraw, py::call_guard<py::gil_scoped_release>())
-		//.def("command", &BasePythonController::command, py::call_guard<py::gil_scoped_release>())
-		//.def("game_state", &BasePythonController::gameState, py::call_guard<py::gil_scoped_release>())
-		//.def("unload", &BasePythonController::unload, py::call_guard<py::gil_scoped_release>())
-		;
+		.def("create_c_buffer", &BasePythonController::createCBuffer, py::call_guard<py::gil_scoped_release>())
+		.def("bind_c_buffer", &BasePythonController::bindCBuffer, py::call_guard<py::gil_scoped_release>())
+		.def("call_post_fx", &BasePythonController::callPostFx, py::call_guard<py::gil_scoped_release>());
 
 	m.def("info", [](py::args s) {LOG(INFO) << arg2str(s); });
 	m.def("warn", [](py::args s) {LOG(WARN) << arg2str(s); });
@@ -481,7 +554,7 @@ void BasePythonController::requestOutput(const std::string & name) { main_->requ
 void BasePythonController::requestOutput_1(const std::string & name, int W, int H) { main_->requestOutput(name, W, H); }
 DataType BasePythonController::outputType(const std::string & name) const { return main_->outputType(name); }
 int BasePythonController::outputChannels(const std::string & name) const { return main_->outputChannels(name); }
-bool BasePythonController::readTarget(const std::string & name, int W, int H, int C, DataType t, void * data) { main_->readTarget(name, W, H, C, t, data); }
+bool BasePythonController::readTarget(const std::string & name, int W, int H, int C, DataType t, void * data) { return main_->readTarget(name, W, H, C, t, data); }
 bool BasePythonController::readTarget_1(const std::string & name, int W, int H, int C, half * data) { return main_->readTarget(name, W, H, C, data); }
 bool BasePythonController::readTarget_2(const std::string & name, int W, int H, int C, float * data) { return main_->readTarget(name, W, H, C, data); }
 bool BasePythonController::readTarget_3(const std::string & name, int W, int H, int C, uint8_t * data) { return main_->readTarget(name, W, H, C, data); }
