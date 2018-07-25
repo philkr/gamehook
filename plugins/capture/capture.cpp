@@ -216,7 +216,7 @@ struct Capture: public GameController {
 		return false;
 	}
 	bool capture = false;
-	virtual void startFrame(uint32_t frame_id) {
+	virtual void onBeginFrame(uint32_t frame_id) override {
 		init();
 		capture = currentRecordingType() != NONE;
 		if (capture) {
@@ -224,7 +224,7 @@ struct Capture: public GameController {
 				requestOutput(t);
 		}
 	}
-	virtual void endFrame(uint32_t frame_id) {
+	virtual void onEndFrame(uint32_t frame_id) override {
 		std::string frame_name = std::to_string(frame_id);
 		frame_name = std::string(8 - frame_name.size(), '0') + frame_name;
 		if (capture) {
@@ -242,7 +242,7 @@ struct Capture: public GameController {
 					saveImage(im);
 				}
 		}
-		std::string gs = getGameState();
+		std::string gs = gameState();
 		if (gs.size() > 5) {
 			gs[gs.size() - 1] = ',';
 			gs = gs + "\"timestamp\": " + std::to_string(time());

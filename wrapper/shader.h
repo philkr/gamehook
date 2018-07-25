@@ -14,19 +14,22 @@ public:
 public:
 	ShaderImp(const ByteCode & code, const std::unordered_map<std::string, std::string> & name_remap);
 
-	virtual std::string disassemble() const override;
+	virtual std::shared_ptr<Shader> append(const std::shared_ptr<Shader> other) const override;
 
 	virtual std::shared_ptr<Shader> subset(const std::vector<uint32_t> & outputs) const override;
 	virtual std::shared_ptr<Shader> subset(const std::vector<std::string> & named_outputs) const override;
 	virtual void renameCBuffer(const std::string & old_name, const std::string & new_name, int new_slot = -1) override;
 	virtual void renameOutput(const std::string & old_name, const std::string & new_name, int sys_id) override;
 
+	virtual std::string disassemble() const override;
+
+	virtual const ShaderHash & hash() const override { return hash_; }
+
 	virtual const std::vector<Binding> & inputs() const override { return inputs_; }
 	virtual const std::vector<Binding> & outputs() const override { return outputs_; }
 	virtual const std::vector<Buffer> & cbuffers() const override { return cbuffers_; }
 	virtual const std::vector<Buffer> & sbuffers() const override { return sbuffers_; }
 	virtual const std::vector<Binding> & textures() const override { return textures_; }
-	virtual const ShaderHash & hash() const override { return hash_; }
 
 	virtual const uint8_t * data() const { return code_.data(); }
 	virtual size_t size() const { return code_.size(); }

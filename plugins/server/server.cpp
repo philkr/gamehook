@@ -511,7 +511,7 @@ struct Server : public GameController {
 	double last_recorded_frame = 0, frame_timestamp = 0;
 	bool recording_current_frame = false;
 	CaptureSettings current_settings;
-	virtual RecordingType recordFrame(uint32_t frame_id) {
+	virtual void onPresent(uint32_t frame_id) override {
 		{
 			std::lock_guard<std::mutex> lock(server.settings_mtx);
 			current_settings = server.settings;
@@ -520,17 +520,17 @@ struct Server : public GameController {
 		if ((frame_timestamp - last_recorded_frame) * current_settings.fps >= 1) {
 			last_recorded_frame = frame_timestamp;
 			recording_current_frame = true;
-			return RecordingType::DRAW;
-		} else {
+			recordNextFrame(RecordingType::DRAW);
+		}
+		else {
 			// Recording disabled, let's make sure we capture the first frame once we enable it.
 			if (current_settings.fps <= 0)
 				last_recorded_frame = 0;
 			recording_current_frame = false;
-			return RecordingType::NONE;
 		}
 	}
 
-	virtual void startFrame(uint32_t frame_id) {
+	virtual void onBeginFrame(uint32_t frame_id) override {
 		recording_current_frame = currentRecordingType() != RecordingType::NONE;
 		if (recording_current_frame) {
 			for (const auto & t : current_settings.targets)
@@ -548,16 +548,16 @@ struct Server : public GameController {
 		{
 			std::lock_guard<std::mutex> lock(server.send_queue_mtx);
 			while (!server.send_queue.empty()) {
-				sendCommand(server.send_queue.front());
+				command(server.send_queue.front());
 				server.send_queue.pop();
 			}
 		}
 	}
-	virtual void endFrame(uint32_t frame_id) {
+	virtual void onEndFrame(uint32_t frame_id) override {
 		server.current_frame_id = frame_id;
 		{
 			std::lock_guard<std::mutex> lock(server.game_info_mtx);
-			server.game_info[frame_id] = getGameState();
+			server.game_info[frame_id] = gameState();
 			// Purge old game states
 			while (server.game_info.size() > server.settings.info_buffer_size)
 				server.game_info.erase(server.game_info.begin());

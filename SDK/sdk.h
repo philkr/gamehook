@@ -93,10 +93,16 @@ struct ShaderInfo {
 	ShaderHash vertex, pixel;
 	Texture2D ps_texture_id;
 };
+struct RenderTargetInfo {
+	std::vector<RenderTargetView> outputs;
+	DepthStencilView depth;
+};
 
 struct DrawInfo {
 	BufferInfo buffer;
 	ShaderInfo shader;
+	RenderTargetInfo target;
+
 	enum Type {
 		VERTEX,
 		INDEX,
@@ -105,8 +111,6 @@ struct DrawInfo {
 	uint16_t instances;
 	uint32_t n; // Number of vertices or indices
 	uint32_t start_index, start_vertex, start_instance;
-	std::vector<RenderTargetView> outputs;
-	DepthStencilView depth_output;
 };
 
 /********************************************************/

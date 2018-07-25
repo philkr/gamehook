@@ -47,8 +47,10 @@ std::shared_ptr<Shader> Shader::create(const ByteCode & src, const std::unordere
 	LOG(WARN) << "Unsupported shader type";
 	return nullptr;
 }
-std::shared_ptr<Shader> Shader::merge(std::shared_ptr<Shader> a, std::shared_ptr<Shader> b) {
-	HLSL ha(ByteCode(a->data(), a->data() + a->size())), hb(ByteCode(b->data(), b->data() + b->size())), hr;
+std::shared_ptr<Shader> ShaderImp::append(const std::shared_ptr<Shader> other) const {
+	std::shared_ptr<ShaderImp> o = std::dynamic_pointer_cast<ShaderImp>(other);
+	ASSERT(o);
+	HLSL ha(code_), hb(o->code_), hr;
 	
 	if (ha.usesDiscard() || ha.writesDepth()) {
 		bool has_uav = hb.listBuffers(1 << 4).size();
@@ -64,9 +66,8 @@ std::shared_ptr<Shader> Shader::merge(std::shared_ptr<Shader> a, std::shared_ptr
 		}
 	}
 	std::unordered_map<std::string, std::string> name_remap;
-	std::shared_ptr<ShaderImp> aI = std::dynamic_pointer_cast<ShaderImp>(a), bI = std::dynamic_pointer_cast<ShaderImp>(b);
-	if (aI) name_remap.insert(aI->name_remap_.begin(), aI->name_remap_.end());
-	if (bI) name_remap.insert(bI->name_remap_.begin(), bI->name_remap_.end());
+	name_remap.insert(name_remap_.begin(), name_remap_.end());
+	name_remap.insert(o->name_remap_.begin(), o->name_remap_.end());
 
 	if (!::merge(ha, hb, &hr, true))
 		return nullptr;
@@ -76,27 +77,8 @@ std::shared_ptr<Shader> Shader::merge(std::shared_ptr<Shader> a, std::shared_ptr
 		return std::make_shared<PixelShader>(src, name_remap);
 	if (hr.type() == HLSL::VERTEX_SHADER)
 		return std::make_shared<VertexShader>(src, name_remap);
-	return nullptr;
-}
-std::shared_ptr<Shader> Shader::compile(const std::string & src, Type type, std::string * err) {
-	if (type == Shader::UNKNOWN) return std::shared_ptr<Shader>();
-	const char * targets[] = { "ps_5_1", "vs_5_1", nullptr };
-	ID3DBlob * code, *error_msgs;
-	HRESULT hr = D3DCompile(src.c_str(), src.size(), nullptr, nullptr, nullptr, "main", targets[(int)type], 0, 0, &code, &error_msgs);
-	if (FAILED(hr)) {
-		if (err)
-			*err = std::string((const char*)error_msgs->GetBufferPointer(), error_msgs->GetBufferSize());
-		code->Release();
-		error_msgs->Release();
-		return std::shared_ptr<Shader>();
-	}
-	ByteCode bc((const char*)code->GetBufferPointer(), ((const char*)code->GetBufferPointer())+code->GetBufferSize());
-	code->Release();
-	error_msgs->Release();
-	if (type == PIXEL)
-		return std::make_shared<PixelShader>(bc);
-	if (type == VERTEX)
-		return std::make_shared<VertexShader>(bc);
+	if (hr.type() == HLSL::COMPUTE_SHADER)
+		return std::make_shared<ComputeShader>(src, name_remap);
 	return nullptr;
 }
 template<typename T1, typename T2, typename ...ARGS>

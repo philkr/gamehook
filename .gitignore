@@ -263,3 +263,4 @@ __pycache__/
 
 /lib*/*.hk
 /lib*/*.dll
+/plugins/python/gen.txt

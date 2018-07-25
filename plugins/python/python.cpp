@@ -20,75 +20,64 @@ struct BasePythonController {
 	virtual ~BasePythonController() {
 	}
 	/****** Callbacks ******/
-	virtual bool keyDown(unsigned char key, unsigned char special_status) { return false; }
-	virtual bool keyUp(unsigned char key) { return false; }
+	void onInitialize() {}
+	void onClose() {}
+	bool onKeyDown(unsigned char key, unsigned char special_status) { return false; }
+	bool onKeyUp(unsigned char key) { return false; }
+	void onBeginFrame(uint32_t frame_id) {}
+	void onPostProcess(uint32_t frame_id) {}
+	void onEndFrame(uint32_t frame_id) {}
+	void onPresent(uint32_t frame_id) {}
+	void onBeginDraw(const DrawInfo & i) {}
+	void onEndDraw(const DrawInfo & i) {}
+	void onCreateShader(std::shared_ptr<Shader> shader) {}
+	void onBindShader(std::shared_ptr<Shader> shader) {}
+	void onCommand(const std::string & json) {}
 
-	virtual RecordingType recordFrame(uint32_t frame_id) { return NONE; }
-	virtual void startFrame(uint32_t frame_id) {}
-	virtual void postProcess(uint32_t frame_id) {}
-	virtual void endFrame(uint32_t frame_id) {}
-	virtual DrawType startDraw(const DrawInfo & i) { return DEFAULT; }
-	virtual void endDraw(const DrawInfo & i) {}
-
-	//virtual std::shared_ptr<Shader> injectShader(std::shared_ptr<Shader> shader) { return std::shared_ptr<Shader>(); }
 	//virtual std::vector<ProvidedTarget> providedTargets() const { return std::vector<ProvidedTarget>(); }
 	//virtual std::vector<ProvidedTarget> providedCustomTargets() const { return std::vector<ProvidedTarget>(); }
-
-	virtual void command(const std::string & json) {}
-	virtual std::string gameState() const { return ""; }
-
-	// Going to remove the controller soon
-	virtual void unload() {}
+	virtual std::string provideGameState() const { return ""; }
 	/****** End Callbacks ******/
 
-
+	/****** Commands ******/
+	void buildShader(const std::shared_ptr<Shader> shader);
+	void bindShader(const std::shared_ptr<Shader> shader);
+	void keyDown(unsigned char key, bool syskey = false);
+	void keyUp(unsigned char key, bool syskey = false);
+	const std::vector<uint8_t> & keyState() const;
+	void mouseDown(float x, float y, uint8_t button);
+	void mouseUp(float x, float y, uint8_t button);
+	void recordNextFrame(RecordingType type);
 	RecordingType currentRecordingType() const;
-	virtual void copyTarget(const std::string & to, const std::string & from) final;
-	virtual std::vector<std::string> listTargets() const final;
-
-	virtual int defaultWidth() const final;
-	virtual int defaultHeight() const final;
-
-	// Game state query functions
-	virtual std::string getGameState() const final;
-
-	// Game command functions
-	virtual void sendCommand(const std::string & json) final;
-
-	/****** Currently UNSUPPORTED ******/
-//	virtual void copyTarget(const std::string & name, const RenderTargetView & rt) final { parent_->copyTarget(name, rt); }
-//	virtual TargetType targetType(const std::string & name) const final { return main_->targetType(name); }
-//	virtual bool hasTarget(const std::string & name) const final { return main_->hasTarget(name); }
-//	virtual bool targetAvailable(const std::string & name) const final { return main_->targetAvailable(name); }
-	// If you want to fetch a specific output request it in the startDraw function (or any time before the target is written, not after!)
-	// The request needs to be renewed for every new frame
-//	virtual void requestOutput(const std::string & name) final { parent_->requestOutput(name); }
-//	virtual void requestOutput(const std::string & name, int W, int H) final { parent_->requestOutput(name, W, H); }
-
-	// What type does a certain output channel have?
-//	virtual DataType outputType(const std::string & name) const final { return main_->outputType(name); }
-//	virtual int outputChannels(const std::string & name) const final { return main_->outputChannels(name); }
-
-	// You can only read targets in the endFrame function, calling it from anywhere else leads to undefined behavior
-	// You need to match the datatype, or else an error will be thrown
-	//virtual bool readTarget(const std::string & name, int W, int H, int C, DataType t, void * data) final { return main_->readTarget(name, W, H, C, t, data); }
-	//virtual bool readTarget(const std::string & name, int W, int H, int C, half * data) final { return main_->readTarget(name, W, H, C, data); }
-	//virtual bool readTarget(const std::string & name, int W, int H, int C, float * data) final { return main_->readTarget(name, W, H, C, data); }
-	//virtual bool readTarget(const std::string & name, int W, int H, int C, uint8_t * data) final { return main_->readTarget(name, W, H, C, data); }
-	//virtual bool readTarget(const std::string & name, int W, int H, int C, uint16_t * data) final { return main_->readTarget(name, W, H, C, data); }
-	//virtual bool readTarget(const std::string & name, int W, int H, int C, uint32_t * data) final { return main_->readTarget(name, W, H, C, data); }
-
-	// Buffer handling and reading
-	//using BaseGameController::readBuffer;
-	//virtual std::shared_ptr<GPUMemory> readBuffer(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate = false) final { return main_->readBuffer(b, offset, n, immediate); }
-	//virtual size_t bufferSize(Buffer b) final { return main_->bufferSize(b); }
-
-	// CBuffer handling
-	//virtual std::shared_ptr<CBuffer> createCBuffer(const std::string & name, size_t max_size) final { return main_->createCBuffer(name, max_size); }
-	//virtual void bindCBuffer(std::shared_ptr<CBuffer> b) final { main_->bindCBuffer(b); }
-
-	//virtual void callPostFx(std::shared_ptr<Shader> shader) final { main_->callPostFx(shader); }
-	/****** End Currently UNSUPPORTED ******/
+	void hideDraw(bool hide = true);
+	void copyTarget(const std::string & to, const std::string & from);
+	void copyTarget_1(const std::string & name, const RenderTargetView & rt);
+	std::vector<std::string> listTargets() const;
+	TargetType targetType(const std::string & name) const;
+	bool hasTarget(const std::string & name) const;
+	bool targetAvailable(const std::string & name) const;
+	int defaultWidth() const;
+	int defaultHeight() const;
+	void requestOutput(const std::string & name);
+	void requestOutput_1(const std::string & name, int W, int H);
+	DataType outputType(const std::string & name) const;
+	int outputChannels(const std::string & name) const;
+	bool readTarget(const std::string & name, int W, int H, int C, DataType t, void * data);
+	bool readTarget_1(const std::string & name, int W, int H, int C, half * data);
+	bool readTarget_2(const std::string & name, int W, int H, int C, float * data);
+	bool readTarget_3(const std::string & name, int W, int H, int C, uint8_t * data);
+	bool readTarget_4(const std::string & name, int W, int H, int C, uint16_t * data);
+	bool readTarget_5(const std::string & name, int W, int H, int C, uint32_t * data);
+	std::shared_ptr<GPUMemory> readBuffer(Buffer b, size_t n, bool immediate = false);
+	std::shared_ptr<GPUMemory> readBuffer_1(Buffer b, size_t offset, size_t n, bool immediate = false);
+	std::shared_ptr<GPUMemory> readBuffer_2(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate = false);
+	size_t bufferSize(Buffer b);
+	std::string gameState() const;
+	void command(const std::string & json);
+	std::shared_ptr<CBuffer> createCBuffer(const std::string & name, size_t max_size);
+	void bindCBuffer(std::shared_ptr<CBuffer> b);
+	void callPostFx(std::shared_ptr<Shader> shader);
+	/****** End Commands ******/
 };
 struct PythonControllerRef {
 	PythonController * ref;
@@ -107,12 +96,148 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 		.value("DRAW", RecordingType::DRAW)
 		.value("DRAW_FIRST", RecordingType::DRAW_FIRST);
 
-	py::enum_<DrawType>(m, "DrawType")
-		.value("DEFAULT", DrawType::DEFAULT)
-		.value("STATIC", DrawType::STATIC)
-		.value("RIGID", DrawType::RIGID)
-		.value("DYNAMIC", DrawType::DYNAMIC)
-		.value("HIDE", DrawType::HIDE);
+	py::enum_<TargetType>(m, "TargetType")
+		.value("UNKNOWN", TargetType::UNKNOWN)
+		.value("R32G32B32A32_TYPELESS", TargetType::R32G32B32A32_TYPELESS)
+		.value("R32G32B32A32_FLOAT", TargetType::R32G32B32A32_FLOAT)
+		.value("R32G32B32A32_UINT", TargetType::R32G32B32A32_UINT)
+		.value("R32G32B32A32_SINT", TargetType::R32G32B32A32_SINT)
+		.value("R32G32B32_TYPELESS", TargetType::R32G32B32_TYPELESS)
+		.value("R32G32B32_FLOAT", TargetType::R32G32B32_FLOAT)
+		.value("R32G32B32_UINT", TargetType::R32G32B32_UINT)
+		.value("R32G32B32_SINT", TargetType::R32G32B32_SINT)
+		.value("R16G16B16A16_TYPELESS", TargetType::R16G16B16A16_TYPELESS)
+		.value("R16G16B16A16_FLOAT", TargetType::R16G16B16A16_FLOAT)
+		.value("R16G16B16A16_UNORM", TargetType::R16G16B16A16_UNORM)
+		.value("R16G16B16A16_UINT", TargetType::R16G16B16A16_UINT)
+		.value("R16G16B16A16_SNORM", TargetType::R16G16B16A16_SNORM)
+		.value("R16G16B16A16_SINT", TargetType::R16G16B16A16_SINT)
+		.value("R32G32_TYPELESS", TargetType::R32G32_TYPELESS)
+		.value("R32G32_FLOAT", TargetType::R32G32_FLOAT)
+		.value("R32G32_UINT", TargetType::R32G32_UINT)
+		.value("R32G32_SINT", TargetType::R32G32_SINT)
+		.value("R32G8X24_TYPELESS", TargetType::R32G8X24_TYPELESS)
+		.value("D32_FLOAT_S8X24_UINT", TargetType::D32_FLOAT_S8X24_UINT)
+		.value("R32_FLOAT_X8X24_TYPELESS", TargetType::R32_FLOAT_X8X24_TYPELESS)
+		.value("X32_TYPELESS_G8X24_UINT", TargetType::X32_TYPELESS_G8X24_UINT)
+		.value("R10G10B10A2_TYPELESS", TargetType::R10G10B10A2_TYPELESS)
+		.value("R10G10B10A2_UNORM", TargetType::R10G10B10A2_UNORM)
+		.value("R10G10B10A2_UINT", TargetType::R10G10B10A2_UINT)
+		.value("R11G11B10_FLOAT", TargetType::R11G11B10_FLOAT)
+		.value("R8G8B8A8_TYPELESS", TargetType::R8G8B8A8_TYPELESS)
+		.value("R8G8B8A8_UNORM", TargetType::R8G8B8A8_UNORM)
+		.value("R8G8B8A8_UNORM_SRGB", TargetType::R8G8B8A8_UNORM_SRGB)
+		.value("R8G8B8A8_UINT", TargetType::R8G8B8A8_UINT)
+		.value("R8G8B8A8_SNORM", TargetType::R8G8B8A8_SNORM)
+		.value("R8G8B8A8_SINT", TargetType::R8G8B8A8_SINT)
+		.value("R16G16_TYPELESS", TargetType::R16G16_TYPELESS)
+		.value("R16G16_FLOAT", TargetType::R16G16_FLOAT)
+		.value("R16G16_UNORM", TargetType::R16G16_UNORM)
+		.value("R16G16_UINT", TargetType::R16G16_UINT)
+		.value("R16G16_SNORM", TargetType::R16G16_SNORM)
+		.value("R16G16_SINT", TargetType::R16G16_SINT)
+		.value("R32_TYPELESS", TargetType::R32_TYPELESS)
+		.value("D32_FLOAT", TargetType::D32_FLOAT)
+		.value("R32_FLOAT", TargetType::R32_FLOAT)
+		.value("R32_UINT", TargetType::R32_UINT)
+		.value("R32_SINT", TargetType::R32_SINT)
+		.value("R24G8_TYPELESS", TargetType::R24G8_TYPELESS)
+		.value("D24_UNORM_S8_UINT", TargetType::D24_UNORM_S8_UINT)
+		.value("R24_UNORM_X8_TYPELESS", TargetType::R24_UNORM_X8_TYPELESS)
+		.value("X24_TYPELESS_G8_UINT", TargetType::X24_TYPELESS_G8_UINT)
+		.value("R8G8_TYPELESS", TargetType::R8G8_TYPELESS)
+		.value("R8G8_UNORM", TargetType::R8G8_UNORM)
+		.value("R8G8_UINT", TargetType::R8G8_UINT)
+		.value("R8G8_SNORM", TargetType::R8G8_SNORM)
+		.value("R8G8_SINT", TargetType::R8G8_SINT)
+		.value("R16_TYPELESS", TargetType::R16_TYPELESS)
+		.value("R16_FLOAT", TargetType::R16_FLOAT)
+		.value("D16_UNORM", TargetType::D16_UNORM)
+		.value("R16_UNORM", TargetType::R16_UNORM)
+		.value("R16_UINT", TargetType::R16_UINT)
+		.value("R16_SNORM", TargetType::R16_SNORM)
+		.value("R16_SINT", TargetType::R16_SINT)
+		.value("R8_TYPELESS", TargetType::R8_TYPELESS)
+		.value("R8_UNORM", TargetType::R8_UNORM)
+		.value("R8_UINT", TargetType::R8_UINT)
+		.value("R8_SNORM", TargetType::R8_SNORM)
+		.value("R8_SINT", TargetType::R8_SINT)
+		.value("A8_UNORM", TargetType::A8_UNORM)
+		.value("R1_UNORM", TargetType::R1_UNORM)
+		.value("R9G9B9E5_SHAREDEXP", TargetType::R9G9B9E5_SHAREDEXP)
+		.value("R8G8_B8G8_UNORM", TargetType::R8G8_B8G8_UNORM)
+		.value("G8R8_G8B8_UNORM", TargetType::G8R8_G8B8_UNORM)
+		.value("BC1_TYPELESS", TargetType::BC1_TYPELESS)
+		.value("BC1_UNORM", TargetType::BC1_UNORM)
+		.value("BC1_UNORM_SRGB", TargetType::BC1_UNORM_SRGB)
+		.value("BC2_TYPELESS", TargetType::BC2_TYPELESS)
+		.value("BC2_UNORM", TargetType::BC2_UNORM)
+		.value("BC2_UNORM_SRGB", TargetType::BC2_UNORM_SRGB)
+		.value("BC3_TYPELESS", TargetType::BC3_TYPELESS)
+		.value("BC3_UNORM", TargetType::BC3_UNORM)
+		.value("BC3_UNORM_SRGB", TargetType::BC3_UNORM_SRGB)
+		.value("BC4_TYPELESS", TargetType::BC4_TYPELESS)
+		.value("BC4_UNORM", TargetType::BC4_UNORM)
+		.value("BC4_SNORM", TargetType::BC4_SNORM)
+		.value("BC5_TYPELESS", TargetType::BC5_TYPELESS)
+		.value("BC5_UNORM", TargetType::BC5_UNORM)
+		.value("BC5_SNORM", TargetType::BC5_SNORM)
+		.value("B5G6R5_UNORM", TargetType::B5G6R5_UNORM)
+		.value("B5G5R5A1_UNORM", TargetType::B5G5R5A1_UNORM)
+		.value("B8G8R8A8_UNORM", TargetType::B8G8R8A8_UNORM)
+		.value("B8G8R8X8_UNORM", TargetType::B8G8R8X8_UNORM)
+		.value("R10G10B10_XR_BIAS_A2_UNORM", TargetType::R10G10B10_XR_BIAS_A2_UNORM)
+		.value("B8G8R8A8_TYPELESS", TargetType::B8G8R8A8_TYPELESS)
+		.value("B8G8R8A8_UNORM_SRGB", TargetType::B8G8R8A8_UNORM_SRGB)
+		.value("B8G8R8X8_TYPELESS", TargetType::B8G8R8X8_TYPELESS)
+		.value("B8G8R8X8_UNORM_SRGB", TargetType::B8G8R8X8_UNORM_SRGB)
+		.value("BC6H_TYPELESS", TargetType::BC6H_TYPELESS)
+		.value("BC6H_UF16", TargetType::BC6H_UF16)
+		.value("BC6H_SF16", TargetType::BC6H_SF16)
+		.value("BC7_TYPELESS", TargetType::BC7_TYPELESS)
+		.value("BC7_UNORM", TargetType::BC7_UNORM)
+		.value("BC7_UNORM_SRGB", TargetType::BC7_UNORM_SRGB)
+		.value("AYUV", TargetType::AYUV)
+		.value("Y410", TargetType::Y410)
+		.value("Y416", TargetType::Y416)
+		.value("NV12", TargetType::NV12)
+		.value("P010", TargetType::P010)
+		.value("P016", TargetType::P016)
+		.value("_420_OPAQUE", TargetType::_420_OPAQUE)
+		.value("YUY2", TargetType::YUY2)
+		.value("Y210", TargetType::Y210)
+		.value("Y216", TargetType::Y216)
+		.value("NV11", TargetType::NV11)
+		.value("AI44", TargetType::AI44)
+		.value("IA44", TargetType::IA44)
+		.value("P8", TargetType::P8)
+		.value("A8P8", TargetType::A8P8)
+		.value("B4G4R4A4_UNORM", TargetType::B4G4R4A4_UNORM)
+		.value("P208", TargetType::P208)
+		.value("V208", TargetType::V208)
+		.value("V408", TargetType::V408)
+		.value("FORCE_UINT", TargetType::FORCE_UINT);
+
+	py::enum_<BindTarget>(m, "BindTarget")
+		.value("COLOR0", BindTarget::COLOR0)
+		.value("COLOR1", BindTarget::COLOR1)
+		.value("COLOR2", BindTarget::COLOR2)
+		.value("COLOR3", BindTarget::COLOR3)
+		.value("COLOR4", BindTarget::COLOR4)
+		.value("COLOR5", BindTarget::COLOR5)
+		.value("COLOR6", BindTarget::COLOR6)
+		.value("COLOR7", BindTarget::COLOR7)
+		.value("UNBIND", BindTarget::UNBIND);
+
+	py::enum_<DataType>(m, "DataType")
+		.value("DT_UINT8", DataType::DT_UINT8)
+		.value("DT_UINT16", DataType::DT_UINT16)
+		.value("DT_UINT32", DataType::DT_UINT32)
+		.value("DT_FLOAT", DataType::DT_FLOAT)
+		.value("DT_HALF", DataType::DT_HALF)
+		.value("DT_UNKNOWN", DataType::DT_UNKNOWN);
+
+	m.def("data_size", dataSize);
 
 	py::class_<PythonControllerRef>(m, "__PythonControllerRef");
 
@@ -123,15 +248,15 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 
 	py::class_<BasePythonController>(m, "BaseController")
 		.def(py::init<PythonControllerRef>())
-		.def("current_recording_type", &BasePythonController::currentRecordingType, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("current_recording_type", &BasePythonController::currentRecordingType, py::call_guard<py::gil_scoped_release>())
 		.def("copy_target", &BasePythonController::copyTarget, py::call_guard<py::gil_scoped_release>())
+		.def("target_type", &BasePythonController::targetType, py::call_guard<py::gil_scoped_release>())
+		.def("has_target", &BasePythonController::hasTarget, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("targets", &BasePythonController::listTargets, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("default_width", &BasePythonController::defaultWidth, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("default_height", &BasePythonController::defaultHeight, py::call_guard<py::gil_scoped_release>())
-		.def("fetch_game_state", &BasePythonController::getGameState, py::call_guard<py::gil_scoped_release>())
-		.def("send_command", &BasePythonController::sendCommand, py::call_guard<py::gil_scoped_release>())
-		.def("key_down", &BasePythonController::keyDown, py::call_guard<py::gil_scoped_release>())
-		.def("key_up", &BasePythonController::keyUp, py::call_guard<py::gil_scoped_release>())
+		.def_property_readonly("game_state", &BasePythonController::gameState, py::call_guard<py::gil_scoped_release>())
+		.def("command", &BasePythonController::command, py::call_guard<py::gil_scoped_release>())
 		//.def("record_frame", &BasePythonController::recordFrame, py::call_guard<py::gil_scoped_release>())
 		//.def("start_frame", &BasePythonController::startFrame, py::call_guard<py::gil_scoped_release>())
 		//.def("post_process", &BasePythonController::postProcess, py::call_guard<py::gil_scoped_release>())
@@ -271,40 +396,51 @@ struct PythonController : public GameController {
 				}
 			}
 	}
-	virtual bool keyDown(unsigned char key, unsigned char special_status) final {
-		if (key == VK_F11) reloadAllModules();
-		return callAll<bool>("key_down", key, special_status);
+	virtual void onInitialize() final {
+		callAll("on_initialize");
 	}
-	virtual bool keyUp(unsigned char key) final {
-		return callAll<bool>("key_up", key);
+	virtual void onClose() final {
+		callAll("on_close");
 	}
-	virtual RecordingType recordFrame(uint32_t frame_id) final {
-		return callAll<RecordingType>("record_frame", frame_id);
+	virtual bool onKeyDown(unsigned char key, unsigned char special_status) final {
+		return callAll<bool>("on_key_down", key, special_status);
 	}
-	virtual void startFrame(uint32_t frame_id) final {
-		callAll("start_frame", frame_id);
+	virtual bool onKeyUp(unsigned char key) final {
+		return callAll<bool>("on_key_up", key);
 	}
-	virtual void postProcess(uint32_t frame_id) final {
-		callAll("post_processing", frame_id);
+	virtual void onBeginFrame(uint32_t frame_id) final {
+		callAll("on_begin_frame", frame_id);
 	}
-	virtual void endFrame(uint32_t frame_id) final {
-		callAll("end_frame", frame_id);
+	virtual void onPostProcess(uint32_t frame_id) final {
+		callAll("on_post_process", frame_id);
 	}
-	virtual DrawType startDraw(const DrawInfo & i) final {
-		return callAll<DrawType>("start_draw", i);
+	virtual void onEndFrame(uint32_t frame_id) final {
+		callAll("on_end_frame", frame_id);
 	}
-	virtual void endDraw(const DrawInfo & i) final {
-		callAll("end_draw", i);
+	virtual void onPresent(uint32_t frame_id) final {
+		callAll("on_present", frame_id);
 	}
-	virtual void command(const std::string & json) {
-		callAll("command", json);
+	virtual void onBeginDraw(const DrawInfo & i) final {
+		callAll("on_begin_draw", i);
 	}
-	virtual std::string gameState() const {
+	virtual void onEndDraw(const DrawInfo & i) final {
+		callAll("on_end_draw", i);
+	}
+	virtual void onCreateShader(std::shared_ptr<Shader> shader) final {
+		callAll("on_create_shader", shader);
+	}
+	virtual void onBindShader(std::shared_ptr<Shader> shader) final {
+		callAll("on_bind_shader", shader);
+	}
+	virtual void onCommand(const std::string & json) final {
+		callAll("on_command", json);
+	}
+	virtual std::string provideGameState() const final {
 		py::gil_scoped_acquire acquire;
 		std::string r = "{";
 		for (auto c : controllers)
-			if (py::hasattr(c, "game_state")) {
-				py::object gs = c.attr("game_state");
+			if (py::hasattr(c, "provide_game_state")) {
+				py::object gs = c.attr("provide_game_state");
 				if (!gs.is_none()) {
 					if (r.size() > 1) r += ",";
 					std::string rr;
@@ -323,13 +459,44 @@ struct PythonController : public GameController {
 
 REGISTER_CONTROLLER(PythonController);
 
+void BasePythonController::buildShader(const std::shared_ptr<Shader> shader) { main_->buildShader(shader); }
+void BasePythonController::bindShader(const std::shared_ptr<Shader> shader) { main_->bindShader(shader); }
+void BasePythonController::keyDown(unsigned char key, bool syskey) { main_->keyDown(key, syskey); }
+void BasePythonController::keyUp(unsigned char key, bool syskey) { main_->keyUp(key, syskey); }
+const std::vector<uint8_t> & BasePythonController::keyState() const { return main_->keyState(); }
+void BasePythonController::mouseDown(float x, float y, uint8_t button) { main_->mouseDown(x, y, button); }
+void BasePythonController::mouseUp(float x, float y, uint8_t button) { main_->mouseUp(x, y, button); }
+void BasePythonController::recordNextFrame(RecordingType type) { main_->recordNextFrame(type); }
 RecordingType BasePythonController::currentRecordingType() const { return main_->currentRecordingType(); }
+void BasePythonController::hideDraw(bool hide) { main_->hideDraw(hide); }
 void BasePythonController::copyTarget(const std::string & to, const std::string & from) { main_->copyTarget(to, from); }
+void BasePythonController::copyTarget_1(const std::string & name, const RenderTargetView & rt) { main_->copyTarget(name, rt); }
 std::vector<std::string> BasePythonController::listTargets() const { return main_->listTargets(); }
+TargetType BasePythonController::targetType(const std::string & name) const { return main_->targetType(name); }
+bool BasePythonController::hasTarget(const std::string & name) const { return main_->hasTarget(name); }
+bool BasePythonController::targetAvailable(const std::string & name) const { return main_->targetAvailable(name); }
 int BasePythonController::defaultWidth() const { return main_->defaultWidth(); }
 int BasePythonController::defaultHeight() const { return main_->defaultHeight(); }
-std::string BasePythonController::getGameState() const { return main_->getGameState(); }
-void BasePythonController::sendCommand(const std::string & json) { return main_->sendCommand(json); };
+void BasePythonController::requestOutput(const std::string & name) { main_->requestOutput(name); }
+void BasePythonController::requestOutput_1(const std::string & name, int W, int H) { main_->requestOutput(name, W, H); }
+DataType BasePythonController::outputType(const std::string & name) const { return main_->outputType(name); }
+int BasePythonController::outputChannels(const std::string & name) const { return main_->outputChannels(name); }
+bool BasePythonController::readTarget(const std::string & name, int W, int H, int C, DataType t, void * data) { main_->readTarget(name, W, H, C, t, data); }
+bool BasePythonController::readTarget_1(const std::string & name, int W, int H, int C, half * data) { return main_->readTarget(name, W, H, C, data); }
+bool BasePythonController::readTarget_2(const std::string & name, int W, int H, int C, float * data) { return main_->readTarget(name, W, H, C, data); }
+bool BasePythonController::readTarget_3(const std::string & name, int W, int H, int C, uint8_t * data) { return main_->readTarget(name, W, H, C, data); }
+bool BasePythonController::readTarget_4(const std::string & name, int W, int H, int C, uint16_t * data) { return main_->readTarget(name, W, H, C, data); }
+bool BasePythonController::readTarget_5(const std::string & name, int W, int H, int C, uint32_t * data) { return main_->readTarget(name, W, H, C, data); }
+std::shared_ptr<GPUMemory> BasePythonController::readBuffer(Buffer b, size_t n, bool immediate) { return main_->readBuffer(b, n, immediate); }
+std::shared_ptr<GPUMemory> BasePythonController::readBuffer_1(Buffer b, size_t offset, size_t n, bool immediate) { return main_->readBuffer(b, offset, n, immediate); }
+std::shared_ptr<GPUMemory> BasePythonController::readBuffer_2(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate) { return main_->readBuffer(b, offset, n, immediate); }
+size_t BasePythonController::bufferSize(Buffer b) { return main_->bufferSize(b); }
+std::string BasePythonController::gameState() const { return main_->gameState(); }
+void BasePythonController::command(const std::string & json) { main_->command(json); }
+std::shared_ptr<CBuffer> BasePythonController::createCBuffer(const std::string & name, size_t max_size) { return main_->createCBuffer(name, max_size); }
+void BasePythonController::bindCBuffer(std::shared_ptr<CBuffer> b) { main_->bindCBuffer(b); }
+void BasePythonController::callPostFx(std::shared_ptr<Shader> shader) { main_->callPostFx(shader); }
+
 
 BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID) {
 	if (reason == DLL_PROCESS_ATTACH) {
@@ -341,3 +508,27 @@ BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID) {
 	}
 	return TRUE;
 }
+
+
+//
+//std::shared_ptr<Shader> Shader::compile(const std::string & src, Type type, std::string * err) {
+//	if (type == Shader::UNKNOWN) return std::shared_ptr<Shader>();
+//	const char * targets[] = { "ps_5_1", "vs_5_1", nullptr };
+//	ID3DBlob * code, *error_msgs;
+//	HRESULT hr = D3DCompile(src.c_str(), src.size(), nullptr, nullptr, nullptr, "main", targets[(int)type], 0, 0, &code, &error_msgs);
+//	if (FAILED(hr)) {
+//		if (err)
+//			*err = std::string((const char*)error_msgs->GetBufferPointer(), error_msgs->GetBufferSize());
+//		code->Release();
+//		error_msgs->Release();
+//		return std::shared_ptr<Shader>();
+//	}
+//	ByteCode bc((const char*)code->GetBufferPointer(), ((const char*)code->GetBufferPointer()) + code->GetBufferSize());
+//	code->Release();
+//	error_msgs->Release();
+//	if (type == PIXEL)
+//		return std::make_shared<PixelShader>(bc);
+//	if (type == VERTEX)
+//		return std::make_shared<VertexShader>(bc);
+//	return nullptr;
+//}
