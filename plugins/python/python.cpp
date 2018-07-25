@@ -2,12 +2,15 @@
 #include <windows.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <D3Dcompiler.h>
 #include "log.h"
 #include "sdk.h"
 #include "pybind11/pybind11.h"
 #include "pybind11/embed.h"
 #include "pybind11/stl.h"
 namespace py = pybind11;
+
+#pragma comment(lib,"d3dcompiler.lib")
 
 const std::vector<std::string> MODULE_PATHS = { "." };
 
@@ -273,6 +276,23 @@ void wrapShader(T m) {
 
 	c
 		.def_static("create", &Shader::create)
+		.def_static("compile", [](std::string src, Shader::Type type) -> std::shared_ptr<Shader> {
+				if (type == Shader::UNKNOWN) return std::shared_ptr<Shader>();
+				const char * targets[] = { "ps_5_1", "vs_5_1", nullptr };
+				ID3DBlob * code, *error_msgs;
+				HRESULT hr = D3DCompile(src.c_str(), src.size(), nullptr, nullptr, nullptr, "main", targets[(int)type], 0, 0, &code, &error_msgs);
+				if (FAILED(hr)) {
+					LOG(WARN) << "Shader compilation failed!";
+					LOG(INFO) << std::string((const char*)error_msgs->GetBufferPointer(), error_msgs->GetBufferSize());
+					code->Release();
+					error_msgs->Release();
+					return std::shared_ptr<Shader>();
+				}
+				ByteCode bc((const char*)code->GetBufferPointer(), ((const char*)code->GetBufferPointer()) + code->GetBufferSize());
+				code->Release();
+				error_msgs->Release();
+				return Shader::create(bc);
+			})
 		.def("append", &Shader::append, py::call_guard<py::gil_scoped_release>())
 //		.def("subset", Shader::subset, py::call_guard<py::gil_scoped_release>())
 		.def("renameCBuffer", &Shader::renameCBuffer, py::call_guard<py::gil_scoped_release>())
@@ -419,13 +439,6 @@ struct PythonController : public GameController {
 		auto gc = py::module::import("gc");
 		gc.attr("collect")();
 	}
-	void initialize() {
-		loadAllModules();
-		loadAllControllers();
-	}
-	~PythonController() {
-		unloadAllModules();
-	}
 	void reloadAllModules() {
 		unloadAllControllers();
 		unloadAllModules();
@@ -470,12 +483,17 @@ struct PythonController : public GameController {
 			}
 	}
 	virtual void onInitialize() final {
+		loadAllModules();
+		loadAllControllers();
 		callAll("on_initialize");
 	}
 	virtual void onClose() final {
 		callAll("on_close");
+		unloadAllControllers();
+		unloadAllModules();
 	}
 	virtual bool onKeyDown(unsigned char key, unsigned char special_status) final {
+		if (key == VK_F11) reloadAllModules();
 		return callAll<bool>("on_key_down", key, special_status);
 	}
 	virtual bool onKeyUp(unsigned char key) final {
@@ -582,26 +600,3 @@ BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID) {
 	return TRUE;
 }
 
-
-//
-//std::shared_ptr<Shader> Shader::compile(const std::string & src, Type type, std::string * err) {
-//	if (type == Shader::UNKNOWN) return std::shared_ptr<Shader>();
-//	const char * targets[] = { "ps_5_1", "vs_5_1", nullptr };
-//	ID3DBlob * code, *error_msgs;
-//	HRESULT hr = D3DCompile(src.c_str(), src.size(), nullptr, nullptr, nullptr, "main", targets[(int)type], 0, 0, &code, &error_msgs);
-//	if (FAILED(hr)) {
-//		if (err)
-//			*err = std::string((const char*)error_msgs->GetBufferPointer(), error_msgs->GetBufferSize());
-//		code->Release();
-//		error_msgs->Release();
-//		return std::shared_ptr<Shader>();
-//	}
-//	ByteCode bc((const char*)code->GetBufferPointer(), ((const char*)code->GetBufferPointer()) + code->GetBufferSize());
-//	code->Release();
-//	error_msgs->Release();
-//	if (type == PIXEL)
-//		return std::make_shared<PixelShader>(bc);
-//	if (type == VERTEX)
-//		return std::make_shared<VertexShader>(bc);
-//	return nullptr;
-//}
