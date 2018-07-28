@@ -37,8 +37,6 @@ struct BasePythonController {
 	void onBindShader(std::shared_ptr<Shader> shader) {}
 	void onCommand(const std::string & json) {}
 
-	//virtual std::vector<ProvidedTarget> providedTargets() const { return std::vector<ProvidedTarget>(); }
-	//virtual std::vector<ProvidedTarget> providedCustomTargets() const { return std::vector<ProvidedTarget>(); }
 	virtual std::string provideGameState() const { return ""; }
 	/****** End Callbacks ******/
 
@@ -53,6 +51,8 @@ struct BasePythonController {
 	void recordNextFrame(RecordingType type);
 	RecordingType currentRecordingType() const;
 	void hideDraw(bool hide = true);
+	void addTarget(const std::string & name, bool hidden = false);
+	void addCustomTarget(const std::string & name, TargetType type, bool hidden = false);
 	void copyTarget(const std::string & to, const std::string & from);
 	void copyTarget_1(const std::string & name, const RenderTargetView & rt);
 	std::vector<std::string> listTargets() const;
@@ -245,8 +245,28 @@ void wrapType(T m) {
 }
 
 template<typename T>
+void wrapResource(T m) {
+	py::class_<Resource>(m, "Resource")
+		.def_readonly("id", &Resource::id)
+		.def("__repr__", [](Resource& r) {return "<Resource id=" + std::to_string(r.id) + ">"; });
+	py::class_<Texture2D, Resource>(m, "Texture2D")
+		.def("__repr__", [](Texture2D& r) {return "<Texture2D id=" + std::to_string(r.id) + ">"; });;
+	py::class_<RenderTargetView, Resource>(m, "RenderTargetView")
+		.def("__repr__", [](RenderTargetView& r) {return "<RenderTargetView id=" + std::to_string(r.id) + ">"; });
+	py::class_<DepthStencilView, Resource>(m, "DepthStencilView")
+		.def("__repr__", [](DepthStencilView& r) {return "<DepthStencilView id=" + std::to_string(r.id) + ">"; });;
+	py::class_<Buffer, Resource>(m, "Buffer")
+		.def("__repr__", [](Buffer& r) {return "<Buffer id=" + std::to_string(r.id) + ">"; });;
+}
+
+template<typename T>
 void wrapShader(T m) {
 	py::class_<ShaderHash>(m, "ShaderHash", py::buffer_protocol())
+		.def(py::init<std::string>())
+		.def("__hash__", [](ShaderHash& that) { return std::hash<ShaderHash>()(that); })
+		.def("__eq__", &ShaderHash::operator==)
+		.def("__ne__", &ShaderHash::operator!=)
+		.def("__str__", &ShaderHash::operator std::string)
 		.def_buffer([](ShaderHash &h) -> py::buffer_info {
 			return py::buffer_info(
 				h.h,                                    /* Pointer to buffer */
@@ -313,10 +333,29 @@ void wrapShader(T m) {
 PYBIND11_EMBEDDED_MODULE(api, m) {
 	wrapType(m);
 	wrapShader(m);
+	wrapResource(m);
 
 	py::class_<PythonControllerRef>(m, "__PythonControllerRef");
 
+	py::class_<BufferInfo>(m, "BufferInfo")
+		.def_readonly("vertex", &BufferInfo::vertex)
+		.def_readonly("index", &BufferInfo::index)
+		.def_readonly("pixel_constant", &BufferInfo::pixel_constant)
+		.def_readonly("vertex_constant", &BufferInfo::vertex_constant);
+
+	py::class_<ShaderInfo>(m, "ShaderInfo")
+		.def_readonly("vertex", &ShaderInfo::vertex)
+		.def_readonly("pixel", &ShaderInfo::pixel)
+		.def_readonly("ps_texture_id", &ShaderInfo::ps_texture_id);
+
+	py::class_<RenderTargetInfo>(m, "RenderTargetInfo")
+		.def_readonly("outputs", &RenderTargetInfo::outputs)
+		.def_readonly("depth", &RenderTargetInfo::depth);
+
 	py::class_<DrawInfo>(m, "DrawInfo")
+		.def_readonly("buffer", &DrawInfo::buffer)
+		.def_readonly("shader", &DrawInfo::shader)
+		.def_readonly("target", &DrawInfo::target)
 		.def_readonly("type", &DrawInfo::type)
 		.def_readonly("instances", &DrawInfo::instances)
 		.def_readonly("n", &DrawInfo::n);
@@ -332,7 +371,9 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 		.def("mouse_up", &BasePythonController::mouseUp, py::call_guard<py::gil_scoped_release>())
 		.def("record_next_frame", &BasePythonController::recordNextFrame, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("current_recording_type", &BasePythonController::currentRecordingType, py::call_guard<py::gil_scoped_release>())
-		.def("hide_draw", &BasePythonController::hideDraw, py::call_guard<py::gil_scoped_release>())
+		.def("hide_draw", &BasePythonController::hideDraw, py::call_guard<py::gil_scoped_release>(), py::arg("hide")=true)
+		.def("add_target", &BasePythonController::addTarget, py::call_guard<py::gil_scoped_release>(), py::arg("name"), py::arg("hidden") = false)
+		.def("add_custom_target", &BasePythonController::addCustomTarget, py::call_guard<py::gil_scoped_release>(), py::arg("name"), py::arg("type"), py::arg("hidden") = false)
 		.def("copy_target", &BasePythonController::copyTarget, py::call_guard<py::gil_scoped_release>())
 		.def("copy_target", &BasePythonController::copyTarget_1, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("list_targets", &BasePythonController::listTargets, py::call_guard<py::gil_scoped_release>())
@@ -386,7 +427,7 @@ struct PythonController : public GameController {
 		py::object on_create_shader;
 		py::object on_bind_shader;
 		py::object on_command;
-		py::object provide_game_state;
+		py::object provide_game_state; 
 		py::object fetch(const char * n) {
 			try {
 				if (py::hasattr(c, n))
@@ -414,8 +455,11 @@ struct PythonController : public GameController {
 		}
 	};
 	std::vector<py::module> modules;
-	bool controllers_loaded = false;
+	bool controllers_loaded = false, force_reload = false;
 	std::vector<Controller> controllers;
+	std::unordered_set<std::shared_ptr<Shader> > all_shaders;
+
+
 	void loadModules(std::string dir = ".") {
 		py::gil_scoped_acquire acquire;
 		modules.clear();
@@ -528,6 +572,8 @@ struct PythonController : public GameController {
 		loadAllModules();
 		loadAllControllers();
 		callAll(&Controller::on_initialize);
+		for (auto shader: all_shaders)
+			callAll(&Controller::on_create_shader, shader);
 	}
 	virtual void onClose() final {
 		callAll(&Controller::on_close);
@@ -535,7 +581,7 @@ struct PythonController : public GameController {
 		unloadAllModules();
 	}
 	virtual bool onKeyDown(unsigned char key, unsigned char special_status) final {
-		if (key == VK_F11) reloadAllModules();
+		if (key == VK_F11) force_reload = true;
 		return callAll<bool>(&Controller::on_key_down, key, special_status);
 	}
 	virtual bool onKeyUp(unsigned char key) final {
@@ -552,6 +598,10 @@ struct PythonController : public GameController {
 	}
 	virtual void onPresent(uint32_t frame_id) final {
 		callAll(&Controller::on_present, frame_id);
+		if (force_reload) {
+			reloadAllModules();
+			force_reload = false;
+		}
 	}
 	virtual void onBeginDraw(const DrawInfo & i) final {
 		callAll(&Controller::on_begin_draw, i);
@@ -561,6 +611,7 @@ struct PythonController : public GameController {
 	}
 	virtual void onCreateShader(std::shared_ptr<Shader> shader) final {
 		callAll(&Controller::on_create_shader, shader);
+		all_shaders.insert(shader);
 	}
 	virtual void onBindShader(std::shared_ptr<Shader> shader) final {
 		callAll(&Controller::on_bind_shader, shader);
@@ -599,6 +650,8 @@ void BasePythonController::mouseUp(float x, float y, uint8_t button) { main_->mo
 void BasePythonController::recordNextFrame(RecordingType type) { main_->recordNextFrame(type); }
 RecordingType BasePythonController::currentRecordingType() const { return main_->currentRecordingType(); }
 void BasePythonController::hideDraw(bool hide) { main_->hideDraw(hide); }
+void BasePythonController::addTarget(const std::string & name, bool hidden) { main_->addTarget(name, hidden); }
+void BasePythonController::addCustomTarget(const std::string & name, TargetType type, bool hidden) { main_->addCustomTarget(name, type, hidden); }
 void BasePythonController::copyTarget(const std::string & to, const std::string & from) { main_->copyTarget(to, from); }
 void BasePythonController::copyTarget_1(const std::string & name, const RenderTargetView & rt) { main_->copyTarget(name, rt); }
 std::vector<std::string> BasePythonController::listTargets() const { return main_->listTargets(); }

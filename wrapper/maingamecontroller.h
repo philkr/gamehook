@@ -9,7 +9,6 @@ public:
 	MainGameController();
 
 	// Initialize the GameController (e.g. pass it shaders already loaded for in the fly loading)
-	virtual void initController(std::shared_ptr<GameController> c) = 0;
 	virtual void clearControllers();
 	virtual void startControllers();
 
@@ -27,12 +26,6 @@ public:
 
 	virtual void onCreateShader(std::shared_ptr<Shader> shader) final;
 	virtual void onBindShader(std::shared_ptr<Shader> shader) final;
-
-	// Other functions
-	virtual std::vector<ProvidedTarget> providedTargets() const override;
-	virtual std::vector<ProvidedTarget> providedCustomTargets() const override;
-	virtual std::vector<ProvidedTarget> providedTargets(std::shared_ptr<GameController> c) const;
-	virtual std::vector<ProvidedTarget> providedCustomTargets(std::shared_ptr<GameController> c) const;
 
 	// State functions
 	virtual std::string gameState() const final;

@@ -43,16 +43,24 @@ unsigned char dik(unsigned char k) {
 }
 void IOHookHigh::sendKey(unsigned char key, unsigned char up) {
 	HWND old_wnd = GetForegroundWindow();
+#ifdef FORCE_FG
 	if (hwnd_ != old_wnd)
 		SetForegroundWindow(hwnd_);
-	INPUT ip = { 0 };
-	ip.type = INPUT_KEYBOARD;
-	ip.ki.wScan = key;
-	ip.ki.dwFlags = KEYEVENTF_SCANCODE | (up * KEYEVENTF_KEYUP);
-	SendInput(1, &ip, sizeof(INPUT));
+#else
+	if (hwnd_ == old_wnd) {
+#endif
+		INPUT ip = { 0 };
+		ip.type = INPUT_KEYBOARD;
+		ip.ki.wScan = key;
+		ip.ki.dwFlags = KEYEVENTF_SCANCODE | (up * KEYEVENTF_KEYUP);
+		SendInput(1, &ip, sizeof(INPUT));
 
+#ifdef FORCE_FG
 	if (hwnd_ != old_wnd)
-		SetForegroundWindow(old_wnd);
+		SetForegroundWindow(old_wnd); 
+#else
+	}
+#endif
 }
 void IOHookHigh::sendKeyDown(unsigned char key) {
 	sendKey(key, 0);

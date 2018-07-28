@@ -73,11 +73,14 @@ template<typename T, typename O> struct IndexHandler {
 			return reverse_id[id.id-1];
 		return 0;
 	}
-	void operator()(std::vector<O> & v, const T * t, size_t n, size_t offset) {
-		if (offset + n > v.size())
-			v.resize(offset + n);
-		for (size_t i = 0; i < n; i++)
+	void operator()(std::vector<O> & v, const T * t, size_t n, size_t offset=0) {
+		v.resize(offset + n);
+		size_t last_index_used = 0;
+		for (size_t i = 0; i < n; i++) {
 			v[offset + i] = (*this)(t[i]);
+			if (v[offset + i]) last_index_used = offset + i + 1;
+		}
+		v.resize(last_index_used);
 	}
 	std::vector<O> operator()(const T * t, size_t n) {
 		if (!t) return std::vector<O>();
@@ -267,10 +270,8 @@ public: // D3D11Hook functions
 	GameHookShader(ShaderInfo * shader_info) :shader_info(shader_info) {
 		ASSERT(shader_info != NULL);
 	}
-	virtual void initController(std::shared_ptr<GameController> c) override {
-		// Fetch a list of all custom render targets (used for auto-binding of PS outputs)
-		for (auto t : providedCustomTargets(c))
-			custom_render_target_set_.insert(t.name);
+	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) {
+		custom_render_target_set_.insert(name);
 	}
 	virtual void startControllers() override {
 		// Feed a new controller some shaders
@@ -456,7 +457,7 @@ public: // Implementation
 
 	virtual void OMSetRenderTargets(UINT NumViews, ID3D11RenderTargetView *const *ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView) {
 		TIC;
-		render_target_info->outputs = rtv_id(ppRenderTargetViews, NumViews);
+		rtv_id(render_target_info->outputs, ppRenderTargetViews, NumViews);
 		render_target_info->depth = dsv_id(pDepthStencilView);
 		current_RenderTargetViews = std::vector<ID3D11RenderTargetView *>(ppRenderTargetViews, ppRenderTargetViews + NumViews);
 		current_UnorderedAccessViews.clear();
@@ -469,7 +470,7 @@ public: // Implementation
 	virtual void OMSetRenderTargetsAndUnorderedAccessViews(UINT NumRTVs, ID3D11RenderTargetView *const *ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView, UINT UAVStartSlot, UINT NumUAVs, ID3D11UnorderedAccessView *const *ppUnorderedAccessViews, const UINT *pUAVInitialCounts) {
 		TIC;
 		if (NumRTVs != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) {
-			render_target_info->outputs = rtv_id(ppRenderTargetViews, NumRTVs);
+			rtv_id(render_target_info->outputs, ppRenderTargetViews, NumRTVs);
 			render_target_info->depth = dsv_id(pDepthStencilView);
 			current_RenderTargetViews = std::vector<ID3D11RenderTargetView *>(ppRenderTargetViews, ppRenderTargetViews + NumRTVs);
 			current_DepthStencilView = pDepthStencilView;
@@ -480,28 +481,20 @@ public: // Implementation
 		render_targets_updated_ = true;
 		TOC;
 	}
-
-	virtual void initController(std::shared_ptr<GameController> c) override {
-		// Fetch all valid render targets
-		const auto & targets = providedTargets(c);
-		for (const auto & t : targets)
-			if (!targets_.count(t.name)) {
-				targets_[t.name] = std::make_shared<RenderTarget>(this);
-				if (!t.hidden)
-					visible_targets_[t.name] = targets_[t.name];
-			}
-
-		const auto & custom_targets = providedCustomTargets(c);
-		for (const auto & t : custom_targets)
-			if (!custom_render_targets_.count(t.name)) {
-				if (targets_.count(t.name))
-					LOG(WARN) << "Render target '" << t.name << "' already exists! Overwriting the old target...";
-				targets_[t.name] = custom_render_targets_[t.name] = std::make_shared<RWTextureTarget>(this, (DXGI_FORMAT)t.type);
-				if (!t.hidden)
-					visible_targets_[t.name] = targets_[t.name];
-			}
+	virtual void addTarget(const std::string & name, bool hidden = false) {
+		if (targets_.count(name))
+			LOG(WARN) << "Render target '" << name << "' already exists!Overwriting the old target...";
+		targets_[name] = std::make_shared<RenderTarget>(this);
+		if (!hidden)
+			visible_targets_[name] = targets_[name];
 	}
-
+	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) {
+		if (custom_render_targets_.count(name) || targets_.count(name))
+			LOG(WARN) << "Render target '" << name << "' already exists! Overwriting the old target...";
+		targets_[name] = custom_render_targets_[name] = std::make_shared<RWTextureTarget>(this, (DXGI_FORMAT)type);
+		if (!hidden)
+			visible_targets_[name] = targets_[name];
+	}
 	// Output handling
 	virtual void copyTarget(const std::string & to, const std::string & from) final {
 		auto j = targets_.find(from), i = targets_.find(to);
@@ -520,6 +513,10 @@ public: // Implementation
 		auto i = targets_.find(name);
 		ASSERT(i != targets_.end());
 		auto t = rtv_id(view_id);
+		if (!t) {
+			LOG(WARN) << "Trying to copy non-existent render target!";
+			return;
+		}
 		if (!i->second) {
 			// Create the target
 			i->second = std::make_shared<RenderTarget>(this);
@@ -615,9 +612,9 @@ public: /***  GameController  ***/
 	virtual void recordNextFrame(RecordingType type) {
 		next_recording_type = type;
 	}
-	virtual void initController(std::shared_ptr<GameController> c) override {
-		GameHookRenderTarget::initController(c);
-		GameHookShader::initController(c);
+	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) {
+		GameHookRenderTarget::addCustomTarget(name, type, hidden);
+		GameHookShader::addCustomTarget(name, type, hidden);
 	}
 
 public: /***  IO Handling  ***/

@@ -117,12 +117,6 @@ struct DrawInfo {
 /** Game controller                                    **/
 /********************************************************/
 
-struct ProvidedTarget {
-	std::string name;
-	TargetType type = TargetType::UNKNOWN;
-	bool hidden = false;
-};
-
 // Interface implementation of the game controller
 class BaseGameController {
 protected:
@@ -165,12 +159,6 @@ private: // Callback functions (they can be overwritten, but shouldn't be called
 	virtual void onCommand(const std::string & json) {}
 
 private: // State functions
-	// Target listings (not this value should NOT change during the execution of your program, you should also NOT write any targets you do not provide)
-	virtual std::vector<ProvidedTarget> providedTargets() const { return std::vector<ProvidedTarget>(); }
-	// Custom targets are render targets that are bound to shaders and cannot be copied into, the shader binding happens according to name
-	// To bind a custom render target simply use a RWTexture2D<...> name; in your injected pixel shader.
-	virtual std::vector<ProvidedTarget> providedCustomTargets() const { return std::vector<ProvidedTarget>(); }
-
 	// Game state function
 	// If multiple plugins produce a state, the JSON struct is merged. If multiple pugins produce the same value, duplicate entries appear in JSON.
 	virtual std::string provideGameState() const { return ""; }
@@ -199,6 +187,10 @@ public:
 	virtual RecordingType currentRecordingType() const = 0;
 	// Hide the current draw call (should only be used in onBeginDraw). It has no effect outside onBeginDraw.
 	virtual void hideDraw(bool hide = true) = 0;
+
+	// Create render targets. Only call these function in onInitialize (or if there is not other option in onPresent). Other behavior might be ill defined.
+	virtual void addTarget(const std::string & name, bool hidden = false) = 0;
+	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) = 0;
 
 	// Output functions
 	virtual void copyTarget(const std::string & to, const std::string & from) = 0;
@@ -273,6 +265,9 @@ public:
 	virtual void recordNextFrame(RecordingType type) final { main_->recordNextFrame(type);  }
 	virtual RecordingType currentRecordingType() const final { return main_->currentRecordingType(); }
 	virtual void hideDraw(bool hide = true) final { main_->hideDraw(hide);  }
+
+	virtual void addTarget(const std::string & name, bool hidden = false) { main_->addTarget(name, hidden); }
+	virtual void addCustomTarget(const std::string & name, TargetType type, bool hidden = false) { main_->addCustomTarget(name, type, hidden); }
 
 	virtual void copyTarget(const std::string & to, const std::string & from) final { main_->copyTarget(to, from); }
 	virtual void copyTarget(const std::string & name, const RenderTargetView & rt) final { main_->copyTarget(name, rt); }

@@ -25,7 +25,6 @@ void MainGameController::startControllers() {
 	}
 	for (auto c : controllers_) {
 		c->onInitialize();
-		initController(c);
 	}
 }
 
@@ -87,40 +86,6 @@ bool MainGameController::onKeyDown(unsigned char key, unsigned char special_stat
 bool MainGameController::onKeyUp(unsigned char key) {
 	return callControllerReturn(controllers_, &GameController::onKeyUp, key);
 }
-std::string TN(const std::string & s) { return s; }
-std::string TN(const ProvidedTarget & s) { return s.name; }
-template<typename T, typename HT> std::vector<T> setMerge(const std::vector<std::shared_ptr<GameController>> &controllers, std::vector<T>(GameController::*f)(void) const) {
-	std::unordered_map<HT, std::pair<T,std::string> > set;
-	for (auto c : controllers) {
-		std::vector<T> t = (c.get()->*f)();
-		std::string cn = typeid(c.get()).name();
-		for (const T & s : t) {
-			HT h = TN(s);
-			if (set.count(h)) {
-				LOG(WARN) << "Plugins '" << set[h].second << "' and '" << cn << "' both provide target '" << h << "'! This will not end well...";
-			} else {
-				set[h] = std::make_pair(s, cn);
-			}
-		}
-	}
-	std::vector<T> r;
-	for (const auto & t : set)
-		r.push_back(t.second.first);
-	return r;
-}
-std::vector<ProvidedTarget> MainGameController::providedTargets() const {
-	return setMerge<ProvidedTarget, std::string>(controllers_, &GameController::providedTargets);
-}
-std::vector<ProvidedTarget> MainGameController::providedCustomTargets() const {
-	return setMerge<ProvidedTarget, std::string>(controllers_, &GameController::providedCustomTargets);
-}
-std::vector<ProvidedTarget> MainGameController::providedTargets(std::shared_ptr<GameController> c) const {
-	return c->providedTargets();
-}
-std::vector<ProvidedTarget> MainGameController::providedCustomTargets(std::shared_ptr<GameController> c) const {
-	return c->providedCustomTargets();
-}
-
 std::string MainGameController::gameState() const {
 	std::string r = "{";
 	for (auto c : controllers_) {
