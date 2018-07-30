@@ -2,15 +2,21 @@
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <Windows.h>
-#include <queue>
 #include <chrono>
+#include <mutex>
+#include <queue>
 #include "log.h"
 #include "sdk.h"
 #include "json.h"
 //#include "mongoose.h"
 #define ASIO_STANDALONE
 #define USE_STANDALONE_ASIO
+#pragma warning( push )
+#pragma warning( disable : 4996)
+#include "external/simple-web-crypto/crypto.hpp" // UGLY hack around openssl dependency
 #include "server_http.hpp"
+#include "server_ws.hpp"
+#pragma warning( pop )
 
 // TODO: It might be worth combining this with a websocket server (https://github.com/eidheim/Simple-WebSocket-Server/issues/71)
 
@@ -206,7 +212,10 @@ struct HTTPServer {
 	std::queue<std::string> send_queue;
 
 	typedef SimpleWeb::Server<SimpleWeb::HTTP> Server;
+//	typedef SimpleWeb::SocketServer<SimpleWeb::WS> WsServer;
+
 	Server server;
+//	WsServer ws_server;
 	HANDLE server_thread;
 template<typename T>
 	void updateSettings(T q) {
@@ -349,6 +358,16 @@ template<typename T>
 			if (GetEnvironmentVariableA("SERVER_PORT", tmp, sizeof(tmp)))
 				server.config.port = atoi(tmp);
 		}
+		//server.on_upgrade = [&ws_server](std::unique_ptr<SimpleWeb::HTTP> &socket, std::shared_ptr<Server::Request> request) {
+		//	auto connection = std::make_shared<WsServer::Connection>(std::move(socket));
+		//	connection->method = std::move(request->method);
+		//	connection->path = std::move(request->path);
+		//	connection->http_version = std::move(request->http_version);
+		//	connection->header = std::move(request->header);
+		//	connection->remote_endpoint = std::move(*request->remote_endpoint);
+		//	ws_server.upgrade(connection);
+		//};
+
 		server.resource["^/status$"]["GET"] = [this](std::shared_ptr<Server::Response> response, std::shared_ptr<Server::Request> request) {
 			if (this->status == STARTED) response->write(std::string("started"));
 			if (this->status == RUNNING) response->write(std::string("running"));
