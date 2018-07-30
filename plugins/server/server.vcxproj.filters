@@ -20,6 +20,9 @@
     <ClInclude Include="..\..\SDK\log.h">
       <Filter>SDK</Filter>
     </ClInclude>
+    <ClInclude Include="viewer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="server.proto">
@@ -28,6 +31,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="server.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="external\simple-web-crypto\sha1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

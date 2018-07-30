@@ -37,16 +37,29 @@ namespace SimpleWeb {
       }
     };
 
+	static std::string hextostr(const std::string & input) noexcept {
+		std::string r;
+		r.resize(input.size() / 2);
+		for (size_t i = 0; i < r.size(); i++) {
+			std::stringstream ss;
+			ss << std::hex << input.substr(2 * i, 2);
+			unsigned int k;
+			ss >> k;
+			r[i] = k;
+		}
+		return r;
+	}
+
     static std::string sha1(const std::string &input) noexcept {
 	  SHA1 sha;
 	  sha.update(input);
-	  return sha.final();
+	  return hextostr(sha.final());
     }
 
     static std::string sha1(std::istream &stream) noexcept {
 	  SHA1 sha;
 	  sha.update(stream);
-	  return sha.final();
+	  return hextostr(sha.final());
     }
 
   };

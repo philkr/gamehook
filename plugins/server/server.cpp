@@ -8,6 +8,7 @@
 #include "log.h"
 #include "sdk.h"
 #include "json.h"
+#include "viewer.h"
 //#include "mongoose.h"
 #define ASIO_STANDALONE
 #define USE_STANDALONE_ASIO
@@ -17,8 +18,6 @@
 #include "server_http.hpp"
 #include "server_ws.hpp"
 #pragma warning( pop )
-
-// TODO: It might be worth combining this with a websocket server (https://github.com/eidheim/Simple-WebSocket-Server/issues/71)
 
 #pragma comment(lib,"ws2_32")
 
@@ -212,10 +211,10 @@ struct HTTPServer {
 	std::queue<std::string> send_queue;
 
 	typedef SimpleWeb::Server<SimpleWeb::HTTP> Server;
-//	typedef SimpleWeb::SocketServer<SimpleWeb::WS> WsServer;
+	typedef SimpleWeb::SocketServer<SimpleWeb::WS> WsServer;
 
 	Server server;
-//	WsServer ws_server;
+	WsServer ws_server;
 	HANDLE server_thread;
 template<typename T>
 	void updateSettings(T q) {
@@ -351,6 +350,15 @@ template<typename T>
 		response->write((const char*)f->data(), W*H*C*DS);
 		return true;
 	}
+	const std::string PING_ENDPOINT = "^/ping/?$";
+	void ping(size_t id, const std::string & msg) {
+		if (ws_server.endpoint.count(PING_ENDPOINT)) {
+			auto &ping_endpoint = ws_server.endpoint[PING_ENDPOINT];
+			for (auto c : ping_endpoint.get_connections()) {
+				c->send("{\"id\": "+std::to_string(id)+", \"message\": \""+msg+"\"}");
+			}
+		}
+	}
 	void start() {
 		server.config.port = DEFAULT_PORT;
 		{
@@ -358,16 +366,31 @@ template<typename T>
 			if (GetEnvironmentVariableA("SERVER_PORT", tmp, sizeof(tmp)))
 				server.config.port = atoi(tmp);
 		}
-		//server.on_upgrade = [&ws_server](std::unique_ptr<SimpleWeb::HTTP> &socket, std::shared_ptr<Server::Request> request) {
-		//	auto connection = std::make_shared<WsServer::Connection>(std::move(socket));
-		//	connection->method = std::move(request->method);
-		//	connection->path = std::move(request->path);
-		//	connection->http_version = std::move(request->http_version);
-		//	connection->header = std::move(request->header);
-		//	connection->remote_endpoint = std::move(*request->remote_endpoint);
-		//	ws_server.upgrade(connection);
-		//};
 
+		// Setup a websock server  
+		server.on_upgrade = [&](std::unique_ptr<SimpleWeb::HTTP> &socket, std::shared_ptr<Server::Request> request) {
+			auto connection = std::make_shared<WsServer::Connection>(std::move(socket));
+			connection->method = std::move(request->method);
+			connection->path = std::move(request->path);
+			connection->http_version = std::move(request->http_version);
+			connection->header = std::move(request->header);
+			connection->remote_endpoint = std::move(*request->remote_endpoint);
+			ws_server.upgrade(connection);
+		};
+		auto &ping_endpoint = ws_server.endpoint[PING_ENDPOINT];
+		ping_endpoint.on_open = [&](std::shared_ptr<WsServer::Connection> connection) {
+			LOG(INFO) << "New ping from " << connection;
+		};
+		ping_endpoint.on_close = [&](std::shared_ptr<WsServer::Connection> connection, int status, const std::string &reason) {
+			LOG(INFO) << "Closed ping from " << connection << " reason: " << reason;
+		};
+
+
+		// Setup the HTTP server
+		server.resource["^/view$"]["GET"] = [this](std::shared_ptr<Server::Response> response, std::shared_ptr<Server::Request> request) {
+			updateSettings(request->parse_query_string());
+			response->write(viewer("localhost:"+std::to_string(server.config.port), settings.targets));
+		};
 		server.resource["^/status$"]["GET"] = [this](std::shared_ptr<Server::Response> response, std::shared_ptr<Server::Request> request) {
 			if (this->status == STARTED) response->write(std::string("started"));
 			if (this->status == RUNNING) response->write(std::string("running"));
@@ -475,7 +498,7 @@ template<typename T>
 						return;
 				}
 			}
-			response->write(SimpleWeb::StatusCode::success_no_content);
+			response->write(SimpleWeb::StatusCode::success_ok);
 		};
 		server.resource["^/raw$"]["GET"] = [this](std::shared_ptr<Server::Response> response, std::shared_ptr<Server::Request> request) {
 			auto q = request->parse_query_string();
@@ -499,7 +522,7 @@ template<typename T>
 						return;
 				}
 			}
-			response->write(SimpleWeb::StatusCode::success_no_content);
+			response->write(SimpleWeb::StatusCode::success_ok);
 		};
 		server.default_resource["GET"] = [](std::shared_ptr<Server::Response> response, std::shared_ptr<Server::Request> request) {
 			response->write(std::string("gamehook server."));
@@ -531,6 +554,8 @@ struct Server : public GameController {
 	bool recording_current_frame = false;
 	CaptureSettings current_settings;
 	virtual void onPresent(uint32_t frame_id) override {
+		if (recording_current_frame)
+			server.ping(frame_id, "frame_recorded");
 		{
 			std::lock_guard<std::mutex> lock(server.settings_mtx);
 			current_settings = server.settings;

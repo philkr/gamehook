@@ -166,11 +166,13 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="external\simple-web-crypto\sha1.cpp" />
     <ClCompile Include="server.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\SDK\log.h" />
     <ClInclude Include="..\..\SDK\sdk.h" />
+    <ClInclude Include="viewer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="server.proto" />
