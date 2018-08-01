@@ -454,41 +454,65 @@ public: // Implementation
 	GameHookRenderTarget(RenderTargetInfo * render_target_info): render_target_info(render_target_info) {
 		ASSERT(render_target_info != NULL);
 	}
-
-	virtual void OMSetRenderTargets(UINT NumViews, ID3D11RenderTargetView *const *ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView) {
-		TIC;
+	template<typename T> bool getWH(T * view, int * width, int * height) {
+		if (view) {
+			ID3D11Resource * t = nullptr;
+			view->GetResource(&t);
+			if (t) {
+				D3D11_RESOURCE_DIMENSION type;
+				t->GetType(&type);
+				if (type == D3D11_RESOURCE_DIMENSION_TEXTURE2D) {
+					ID3D11Texture2D * tt = static_cast<ID3D11Texture2D *>(t);
+					D3D11_TEXTURE2D_DESC desc;
+					tt->GetDesc(&desc);
+					*width = desc.Width;
+					*height = desc.Height;
+					t->Release();
+					return true;
+				}
+				t->Release();
+			}
+		}
+		return false;
+	}
+	virtual void updateRTV(UINT NumViews, ID3D11RenderTargetView *const *ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView) {
 		rtv_id(render_target_info->outputs, ppRenderTargetViews, NumViews);
 		render_target_info->depth = dsv_id(pDepthStencilView);
 		current_RenderTargetViews = std::vector<ID3D11RenderTargetView *>(ppRenderTargetViews, ppRenderTargetViews + NumViews);
-		current_UnorderedAccessViews.clear();
 		current_DepthStencilView = pDepthStencilView;
-		D3D11Hook::OMSetRenderTargets(NumViews, ppRenderTargetViews, pDepthStencilView);
+		render_target_info->width = render_target_info->height = 0;
+		if (!getWH(pDepthStencilView, &render_target_info->width, &render_target_info->height))
+			for (UINT i = 0; i < NumViews; i++)
+				if (getWH(ppRenderTargetViews[i], &render_target_info->width, &render_target_info->height))
+					break;
 		render_targets_updated_ = true;
+	}
+	virtual void OMSetRenderTargets(UINT NumViews, ID3D11RenderTargetView *const *ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView) {
+		TIC;
+		updateRTV(NumViews, ppRenderTargetViews, pDepthStencilView);
+		current_UnorderedAccessViews.clear();
+		D3D11Hook::OMSetRenderTargets(NumViews, ppRenderTargetViews, pDepthStencilView);
 		TOC;
 	}
 
 	virtual void OMSetRenderTargetsAndUnorderedAccessViews(UINT NumRTVs, ID3D11RenderTargetView *const *ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView, UINT UAVStartSlot, UINT NumUAVs, ID3D11UnorderedAccessView *const *ppUnorderedAccessViews, const UINT *pUAVInitialCounts) {
 		TIC;
 		if (NumRTVs != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) {
-			rtv_id(render_target_info->outputs, ppRenderTargetViews, NumRTVs);
-			render_target_info->depth = dsv_id(pDepthStencilView);
-			current_RenderTargetViews = std::vector<ID3D11RenderTargetView *>(ppRenderTargetViews, ppRenderTargetViews + NumRTVs);
-			current_DepthStencilView = pDepthStencilView;
+			updateRTV(NumRTVs, ppRenderTargetViews, pDepthStencilView);
 		}
 		if (NumUAVs != D3D11_KEEP_UNORDERED_ACCESS_VIEWS)
 			current_UnorderedAccessViews = std::vector<ID3D11UnorderedAccessView *>(ppUnorderedAccessViews, ppUnorderedAccessViews + NumUAVs);
 		D3D11Hook::OMSetRenderTargetsAndUnorderedAccessViews(NumRTVs, ppRenderTargetViews, pDepthStencilView, UAVStartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
-		render_targets_updated_ = true;
 		TOC;
 	}
-	virtual void addTarget(const std::string & name, bool hidden = false) {
+	virtual void addTarget(const std::string & name, TargetType type_hint, bool hidden = false) final {
 		if (targets_.count(name))
 			LOG(WARN) << "Render target '" << name << "' already exists!Overwriting the old target...";
-		targets_[name] = std::make_shared<RenderTarget>(this);
+		targets_[name] = std::make_shared<RenderTarget>(this, (DXGI_FORMAT)type_hint);
 		if (!hidden)
 			visible_targets_[name] = targets_[name];
 	}
-	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) {
+	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) override {
 		if (custom_render_targets_.count(name) || targets_.count(name))
 			LOG(WARN) << "Render target '" << name << "' already exists! Overwriting the old target...";
 		targets_[name] = custom_render_targets_[name] = std::make_shared<RWTextureTarget>(this, (DXGI_FORMAT)type);
@@ -612,7 +636,7 @@ public: /***  GameController  ***/
 	virtual void recordNextFrame(RecordingType type) {
 		next_recording_type = type;
 	}
-	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) {
+	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) final {
 		GameHookRenderTarget::addCustomTarget(name, type, hidden);
 		GameHookShader::addCustomTarget(name, type, hidden);
 	}

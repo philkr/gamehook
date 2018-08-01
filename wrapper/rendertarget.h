@@ -97,12 +97,13 @@ protected:
 };
 
 struct RenderTarget: public BaseRenderTarget {
+	DXGI_FORMAT hint_;
 	D3DTexture2D tex_;
 	ID3D11ShaderResourceView * view_ = nullptr;
 
 	RenderTarget(const RenderTarget &) = delete;
 	RenderTarget& operator=(const RenderTarget &) = delete;
-	RenderTarget(D3D11Hook * h);
+	RenderTarget(D3D11Hook * h, DXGI_FORMAT hint = DXGI_FORMAT_UNKNOWN);
 	virtual ~RenderTarget();
 
 	using BaseRenderTarget::copyFrom;

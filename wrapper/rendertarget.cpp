@@ -365,7 +365,7 @@ ID3D11Texture2D * BaseRenderTarget::tex() const {
 
 
 
-RenderTarget::RenderTarget(D3D11Hook * h) :BaseRenderTarget(h), tex_(h) {}
+RenderTarget::RenderTarget(D3D11Hook * h, DXGI_FORMAT hint) :BaseRenderTarget(h), tex_(h), hint_(hint) {}
 RenderTarget::~RenderTarget() {
 	if (view_) view_->Release();
 }
@@ -377,8 +377,9 @@ void BaseRenderTarget::copyFrom(const BaseRenderTarget & rt) {
 void RenderTarget::copyFrom(ID3D11Texture2D * tex, DXGI_FORMAT hint) {
 	D3D11_TEXTURE2D_DESC t_desc = { 0 };
 	tex->GetDesc(&t_desc);
-	LOG(INFO) << "Copy " << t_desc.Format << " " << hint;
-	if (hint != DXGI_FORMAT_UNKNOWN)
+	if (hint_ != DXGI_FORMAT_UNKNOWN)
+		t_desc.Format = hint_;
+	else if (hint != DXGI_FORMAT_UNKNOWN)
 		t_desc.Format = hint;
 
 	bool use_mip = canMip(t_desc.Format);

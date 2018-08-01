@@ -51,7 +51,8 @@ struct BasePythonController {
 	void recordNextFrame(RecordingType type);
 	RecordingType currentRecordingType() const;
 	void hideDraw(bool hide = true);
-	void addTarget(const std::string & name, bool hidden = false);
+	void addTarget1(const std::string & name, bool hidden = false);
+	void addTarget2(const std::string & name, TargetType type, bool hidden = false);
 	void addCustomTarget(const std::string & name, TargetType type, bool hidden = false);
 	void copyTarget(const std::string & to, const std::string & from);
 	void copyTarget_1(const std::string & name, const RenderTargetView & rt);
@@ -350,7 +351,9 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 
 	py::class_<RenderTargetInfo>(m, "RenderTargetInfo")
 		.def_readonly("outputs", &RenderTargetInfo::outputs)
-		.def_readonly("depth", &RenderTargetInfo::depth);
+		.def_readonly("depth", &RenderTargetInfo::depth)
+		.def_readonly("width", &RenderTargetInfo::width)
+		.def_readonly("height", &RenderTargetInfo::height);
 
 	py::class_<DrawInfo>(m, "DrawInfo")
 		.def_readonly("buffer", &DrawInfo::buffer)
@@ -372,7 +375,8 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 		.def("record_next_frame", &BasePythonController::recordNextFrame, py::call_guard<py::gil_scoped_release>())
 		.def_property_readonly("current_recording_type", &BasePythonController::currentRecordingType, py::call_guard<py::gil_scoped_release>())
 		.def("hide_draw", &BasePythonController::hideDraw, py::call_guard<py::gil_scoped_release>(), py::arg("hide")=true)
-		.def("add_target", &BasePythonController::addTarget, py::call_guard<py::gil_scoped_release>(), py::arg("name"), py::arg("hidden") = false)
+		.def("add_target", &BasePythonController::addTarget1, py::call_guard<py::gil_scoped_release>(), py::arg("name"), py::arg("hidden") = false)
+		.def("add_target", &BasePythonController::addTarget2, py::call_guard<py::gil_scoped_release>(), py::arg("name"), py::arg("type"), py::arg("hidden") = false)
 		.def("add_custom_target", &BasePythonController::addCustomTarget, py::call_guard<py::gil_scoped_release>(), py::arg("name"), py::arg("type"), py::arg("hidden") = false)
 		.def("copy_target", &BasePythonController::copyTarget, py::call_guard<py::gil_scoped_release>())
 		.def("copy_target", &BasePythonController::copyTarget_1, py::call_guard<py::gil_scoped_release>())
@@ -650,7 +654,8 @@ void BasePythonController::mouseUp(float x, float y, uint8_t button) { main_->mo
 void BasePythonController::recordNextFrame(RecordingType type) { main_->recordNextFrame(type); }
 RecordingType BasePythonController::currentRecordingType() const { return main_->currentRecordingType(); }
 void BasePythonController::hideDraw(bool hide) { main_->hideDraw(hide); }
-void BasePythonController::addTarget(const std::string & name, bool hidden) { main_->addTarget(name, hidden); }
+void BasePythonController::addTarget1(const std::string & name, bool hidden) { main_->addTarget(name, hidden); }
+void BasePythonController::addTarget2(const std::string & name, TargetType type, bool hidden) { main_->addTarget(name, type, hidden); }
 void BasePythonController::addCustomTarget(const std::string & name, TargetType type, bool hidden) { main_->addCustomTarget(name, type, hidden); }
 void BasePythonController::copyTarget(const std::string & to, const std::string & from) { main_->copyTarget(to, from); }
 void BasePythonController::copyTarget_1(const std::string & name, const RenderTargetView & rt) { main_->copyTarget(name, rt); }

@@ -25,16 +25,16 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="server.proto">
-      <Filter>Resource Files</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="server.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="external\simple-web-crypto\sha1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="view.html">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

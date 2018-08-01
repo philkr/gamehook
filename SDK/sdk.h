@@ -96,6 +96,7 @@ struct ShaderInfo {
 struct RenderTargetInfo {
 	std::vector<RenderTargetView> outputs;
 	DepthStencilView depth;
+	int width, height;
 };
 
 struct DrawInfo {
@@ -189,7 +190,7 @@ public:
 	virtual void hideDraw(bool hide = true) = 0;
 
 	// Create render targets. Only call these function in onInitialize (or if there is not other option in onPresent). Other behavior might be ill defined.
-	virtual void addTarget(const std::string & name, bool hidden = false) = 0;
+	virtual void addTarget(const std::string & name, TargetType type_hint, bool hidden = false) = 0;
 	virtual void addCustomTarget(const std::string & name, TargetType type = TargetType::UNKNOWN, bool hidden = false) = 0;
 
 	// Output functions
@@ -266,7 +267,8 @@ public:
 	virtual RecordingType currentRecordingType() const final { return main_->currentRecordingType(); }
 	virtual void hideDraw(bool hide = true) final { main_->hideDraw(hide);  }
 
-	virtual void addTarget(const std::string & name, bool hidden = false) { main_->addTarget(name, hidden); }
+	virtual void addTarget(const std::string & name, bool hidden = false) { main_->addTarget(name, TargetType::UNKNOWN, hidden); }
+	virtual void addTarget(const std::string & name, TargetType type_hint, bool hidden = false) { main_->addTarget(name, type_hint, hidden); }
 	virtual void addCustomTarget(const std::string & name, TargetType type, bool hidden = false) { main_->addCustomTarget(name, type, hidden); }
 
 	virtual void copyTarget(const std::string & to, const std::string & from) final { main_->copyTarget(to, from); }

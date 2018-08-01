@@ -1,6 +1,6 @@
 import json
 import re
-
+import os
 r_host = re.compile('var HOST = .*;')
 r_target = re.compile('var TARGETS = \[.*\];')
 with open('view.html', 'r') as view:

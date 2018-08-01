@@ -28,7 +28,7 @@ double time() {
 	return std::chrono::duration<double>(now.time_since_epoch()).count();
 }
 struct CaptureSettings {
-	int W = 800, H = 600;
+	int W = 0, H = 0;
 	float fps = 0;
 	int frame_buffer_size = 10;
 	int info_buffer_size = 1000;
@@ -559,6 +559,8 @@ struct Server : public GameController {
 		{
 			std::lock_guard<std::mutex> lock(server.settings_mtx);
 			current_settings = server.settings;
+			if (current_settings.W == 0) current_settings.W = defaultWidth();
+			if (current_settings.H == 0) current_settings.H = defaultHeight();
 		}
 		frame_timestamp = time();
 		if ((frame_timestamp - last_recorded_frame) * current_settings.fps >= 1) {
@@ -632,7 +634,8 @@ struct Server : public GameController {
 						readTarget(t, W, H, C, f->type(), f->data());
 						// Color correction
 						TargetType tt = targetType(t);
-						if ((B8G8R8A8_UNORM <= tt && tt <= B8G8R8X8_UNORM_SRGB && tt != R10G10B10_XR_BIAS_A2_UNORM) && C == 4) {
+						// TODO: There is a but in FC Primal that flips RB
+						if (((B8G8R8A8_UNORM <= tt && tt <= B8G8R8X8_UNORM_SRGB && tt != R10G10B10_XR_BIAS_A2_UNORM) || (R8G8B8A8_UNORM <= tt && tt <= R8G8B8A8_UNORM_SRGB)) && C == 4) {
 							// Flip RB
 							uint8_t * d = (uint8_t*)f->data();
 							// TODO: SSE This if it's too slow _mm_shuffle_epi8
