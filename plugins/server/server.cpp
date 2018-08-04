@@ -259,7 +259,7 @@ template<typename T>
 			if (std::isnan(s)) {
 				o[0] = o[1] = o[2] = 0;
 			} else {
-				float h = (atan2(d[1], d[0]) / 3.14159265359f + 0.5f);
+				float h = (atan2(d[1], d[0]) / 3.14159265359f + 1.0f) / 2.0f;
 				// HSV to RGB
 				int hi = (int)(6 * h + 6) % 6;
 				float f = 6 * h - hi;
