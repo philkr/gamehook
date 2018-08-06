@@ -297,28 +297,28 @@ void wrapShader(T m) {
 		.def_readonly("bind_point", &Shader::Binding::bind_point);
 
 	c
-		.def_static("create", &Shader::create)
-		.def_static("compile", [](std::string src, Shader::Type type) -> std::shared_ptr<Shader> {
-				if (type == Shader::UNKNOWN) return std::shared_ptr<Shader>();
-				const char * targets[] = { "ps_5_1", "vs_5_1", nullptr };
-				ID3DBlob * code, *error_msgs;
-				HRESULT hr = D3DCompile(src.c_str(), src.size(), nullptr, nullptr, nullptr, "main", targets[(int)type], 0, 0, &code, &error_msgs);
-				if (FAILED(hr)) {
-					LOG(WARN) << "Shader compilation failed!";
-					LOG(INFO) << std::string((const char*)error_msgs->GetBufferPointer(), error_msgs->GetBufferSize());
-					code->Release();
-					error_msgs->Release();
-					return std::shared_ptr<Shader>();
-				}
-				ByteCode bc((const char*)code->GetBufferPointer(), ((const char*)code->GetBufferPointer()) + code->GetBufferSize());
-				code->Release();
-				error_msgs->Release();
-				return Shader::create(bc);
-			})
+		.def_static("create", &Shader::create, py::arg("bytecode"), py::arg("name_remap")=std::unordered_map<std::string, std::string>())
+		.def_static("compile", [](std::string src, Shader::Type type, const std::unordered_map<std::string, std::string> & name_remap = std::unordered_map<std::string, std::string>()) -> py::object {
+			if (type == Shader::UNKNOWN) return py::none();
+			const char * targets[] = { "vs_5_0", "ps_5_0", nullptr };
+			ID3DBlob * code, *error_msgs;
+			HRESULT hr = D3DCompile(src.c_str(), src.size(), nullptr, nullptr, nullptr, "main", targets[(int)type], 0, 0, &code, &error_msgs);
+			if (FAILED(hr)) {
+				LOG(WARN) << "Shader compilation failed!";
+				LOG(INFO) << std::string((const char*)error_msgs->GetBufferPointer(), error_msgs->GetBufferSize());
+				if (code) code->Release();
+				if (error_msgs) error_msgs->Release();
+				return py::none();
+			}
+			ByteCode bc((const char*)code->GetBufferPointer(), ((const char*)code->GetBufferPointer()) + code->GetBufferSize());
+			if (code) code->Release();
+			if (error_msgs) error_msgs->Release();
+			return py::cast(Shader::create(bc, name_remap));
+		}, py::arg("code"), py::arg("type"), py::arg("name_remap") = std::unordered_map<std::string, std::string>())
 		.def("append", &Shader::append, py::call_guard<py::gil_scoped_release>())
 //		.def("subset", Shader::subset, py::call_guard<py::gil_scoped_release>())
-		.def("renameCBuffer", &Shader::renameCBuffer, py::call_guard<py::gil_scoped_release>())
-		.def("renameOutput", &Shader::renameOutput, py::call_guard<py::gil_scoped_release>())
+		.def("rename_cbuffer", &Shader::renameCBuffer, py::call_guard<py::gil_scoped_release>(), py::arg("old_name"), py::arg("new_name"), py::arg("new_slot") = -1)
+		.def("rename_output", &Shader::renameOutput, py::call_guard<py::gil_scoped_release>(), py::arg("old_name"), py::arg("new_name"), py::arg("sys_id") = 0)
 		.def("disassemble", &Shader::disassemble, py::call_guard<py::gil_scoped_release>())
 
 		.def_property_readonly("type", &Shader::type, py::call_guard<py::gil_scoped_release>())
@@ -512,8 +512,16 @@ struct PythonController : public GameController {
 				py::list mb = inspect.attr("getmembers")(m);
 				for (auto c : mb) {
 					py::object cls = py::cast<py::tuple>(c)[1];
-					if (py::cast<bool>(inspect.attr("isclass")(cls)) && PyObject_IsSubclass(cls.ptr(), base_controller.ptr()))
-						controllers.push_back(Controller(cls(PythonControllerRef(this))));
+					if (py::cast<bool>(inspect.attr("isclass")(cls)) && PyObject_IsSubclass(cls.ptr(), base_controller.ptr())) {
+						try {
+							py::object new_ctl = cls(PythonControllerRef(this));
+							if (!new_ctl.is_none())
+								controllers.push_back(Controller(new_ctl));
+						}
+						catch (py::error_already_set e) {
+							LOG(WARN) << "Failed to create controller. " << e.what();
+						}
+					}
 				}
 			}
 		}

@@ -430,6 +430,8 @@ template<int V>
 		memcpy(this, buf, RDEF_<0x400>::HeaderSize);
 		//if (version == 0x501)
 			//return parseV<0x501>(buf, n);
+		if (version == 0x501)
+			return parseV<0x500>(buf, n);
 		if (version == 0x500)
 			return parseV<0x500>(buf, n);
 		if (version == 0x400)
