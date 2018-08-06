@@ -81,10 +81,13 @@ template<typename ...Args> RecordingType callController(const std::vector<std::s
 	return (RecordingType)r;
 }
 bool MainGameController::onKeyDown(unsigned char key, unsigned char special_status) {
-	return callControllerReturn(controllers_, &GameController::onKeyDown, key, special_status);
+	return callController(controllers_, &GameController::onKeyDown, key, special_status);
 }
 bool MainGameController::onKeyUp(unsigned char key) {
-	return callControllerReturn(controllers_, &GameController::onKeyUp, key);
+	return callController(controllers_, &GameController::onKeyUp, key);
+}
+bool MainGameController::onKillFocus() {
+	return callController(controllers_, &GameController::onKillFocus);
 }
 std::string MainGameController::gameState() const {
 	std::string r = "{";

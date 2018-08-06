@@ -14,7 +14,8 @@ public:
 
 	// Callbacks
 	virtual bool onKeyDown(unsigned char key, unsigned char special_status);
-	virtual bool onKeyUp(unsigned char key);
+	virtual bool onKeyUp(unsigned char key) final;
+	virtual bool onKillFocus() final;
 
 	virtual void onBeginFrame(uint32_t frame_id) final;
 	virtual void onPostProcess(uint32_t frame_id) final;

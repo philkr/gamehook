@@ -383,7 +383,6 @@ void RenderTarget::copyFrom(ID3D11Texture2D * tex, DXGI_FORMAT hint) {
 		t_desc.Format = hint;
 
 	bool use_mip = canMip(t_desc.Format);
-	LOG(INFO) << "Setup " << t_desc.Width << " " << t_desc.Height << " " << t_desc.Format << " " << use_mip;
 	if (tex_.setup(t_desc.Width, t_desc.Height, t_desc.Format, use_mip ? 5 : 1, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE | (use_mip ? D3D11_BIND_RENDER_TARGET : 0), 0, use_mip ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0)) {
 		if (view_) view_->Release();
 		HRESULT hr;

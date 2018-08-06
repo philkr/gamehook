@@ -119,6 +119,9 @@ LRESULT IOHookHigh::wndProc(UINT uMsg, WPARAM wParam, LPARAM lParam) {
 //		else
 //			LOG(WARN) << "Unhandled keyboard event " << uMsg;
 	}
+	if (uMsg == WM_KILLFOCUS) {
+		if (handleKillFocus()) return 0;
+	}
 	//if (uMsg == WM_TIMER)
 	//	LOG(INFO) << "Timer " << wParam << " " << lParam;
 	return IOHook::wndProc(uMsg, wParam, lParam);

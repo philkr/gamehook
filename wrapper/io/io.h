@@ -33,6 +33,7 @@ struct IOHookHigh : public IOHook {
 	// Handle key down and up events (return true to swallow)
 	virtual bool handleKeyDown(unsigned char key, unsigned char special_status) = 0;
 	virtual bool handleKeyUp(unsigned char key) = 0;
+	virtual bool handleKillFocus() = 0;
 	virtual void sendKeyDown(unsigned char key);
 	virtual void sendKeyUp(unsigned char key);
 	virtual void sendMouse(uint16_t x, uint16_t y, uint8_t button, UINT o);

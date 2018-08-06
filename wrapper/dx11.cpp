@@ -116,6 +116,9 @@ struct GameHookIO : virtual public IOHookHigh, virtual public MainGameController
 	virtual bool handleKeyUp(unsigned char key) {
 		return onKeyUp(key);
 	}
+	virtual bool handleKillFocus() {
+		return onKillFocus();
+	}
 	// GameController -> IOHookHigh
 	virtual void keyDown(unsigned char key) {
 		IOHookHigh::sendKeyDown(key);

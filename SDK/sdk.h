@@ -138,6 +138,7 @@ private: // Callback functions (they can be overwritten, but shouldn't be called
 	// IO Callback functions (return true swallows the callback, no other functions are called)
 	virtual bool onKeyDown(unsigned char key, unsigned char special_status) { return false; }
 	virtual bool onKeyUp(unsigned char key) { return false; }
+	virtual bool onKillFocus() { return false; }
 
 	/******* Rendering *******/
 	// Frame callback functions (called in order of definition below, onEndFrame is the last chance to fetch images, onPresent might have lost or overwritten the buffers already)

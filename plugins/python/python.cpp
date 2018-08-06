@@ -27,6 +27,7 @@ struct BasePythonController {
 	void onClose() {}
 	bool onKeyDown(unsigned char key, unsigned char special_status) { return false; }
 	bool onKeyUp(unsigned char key) { return false; }
+	bool onKillFocus() { return false; }
 	void onBeginFrame(uint32_t frame_id) {}
 	void onPostProcess(uint32_t frame_id) {}
 	void onEndFrame(uint32_t frame_id) {}
@@ -422,6 +423,7 @@ struct PythonController : public GameController {
 		py::object on_close;
 		py::object on_key_down;
 		py::object on_key_up;
+		py::object on_kill_focus;
 		py::object on_begin_frame;
 		py::object on_post_process;
 		py::object on_end_frame;
@@ -446,6 +448,7 @@ struct PythonController : public GameController {
 			on_close = fetch("on_close");
 			on_key_down = fetch("on_key_down");
 			on_key_up = fetch("on_key_up");
+			on_kill_focus = fetch("on_kill_focus");
 			on_begin_frame = fetch("on_begin_frame");
 			on_post_process = fetch("on_post_process");
 			on_end_frame = fetch("on_end_frame");
@@ -590,6 +593,9 @@ struct PythonController : public GameController {
 	}
 	virtual bool onKeyUp(unsigned char key) final {
 		return callAll<bool>(&Controller::on_key_up, key);
+	}
+	virtual bool onKillFocus() final {
+		return callAll<bool>(&Controller::on_kill_focus);
 	}
 	virtual void onBeginFrame(uint32_t frame_id) final {
 		callAll(&Controller::on_begin_frame, frame_id);
