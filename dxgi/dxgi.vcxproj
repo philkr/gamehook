@@ -71,7 +71,8 @@
       <AdditionalDependencies>libMinHook.lib;wrapper.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y $(TargetPath) $(SolutionDir)lib64\</Command>
+      <Command>copy /Y $(TargetPath) $(SolutionDir)lib64\
+copy /Y $(TargetDir)$(TargetName).lib $(SolutionDir)lib64\</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -91,7 +92,8 @@
       <AdditionalDependencies>libMinHook.lib;wrapper.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y $(TargetPath) $(SolutionDir)lib32\</Command>
+      <Command>copy /Y $(TargetPath) $(SolutionDir)lib32\
+copy /Y $(TargetDir)$(TargetName).lib $(SolutionDir)lib32\</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -111,7 +113,8 @@
       <AdditionalDependencies>libMinHook.lib;wrapper.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y $(TargetPath) $(SolutionDir)lib64\</Command>
+      <Command>copy /Y $(TargetPath) $(SolutionDir)lib64\
+copy /Y $(TargetDir)$(TargetName).lib $(SolutionDir)lib64\</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -131,7 +134,8 @@
       <AdditionalDependencies>libMinHook.lib;wrapper.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y $(TargetPath) $(SolutionDir)lib32\</Command>
+      <Command>copy /Y $(TargetPath) $(SolutionDir)lib32\
+copy /Y $(TargetDir)$(TargetName).lib $(SolutionDir)lib32\</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
