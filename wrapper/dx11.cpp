@@ -940,16 +940,28 @@ public: /* Drawing calls */
 			D3D11Hook::DrawInstanced(VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation);
 		endDraw();
 	}
+	bool warn_draw_auto = true;
 	virtual void DrawAuto() {
-		LOG(INFO) << "Not hooking DrawAuto";
+		if (warn_draw_auto) {
+			LOG(INFO) << "Not hooking DrawAuto (further warnings will be suppressed)";
+			warn_draw_auto = false;
+		}
 		D3D11Hook::DrawAuto();
 	}
+	bool warn_draw_indexed_instanced_indirect = true;
 	virtual void DrawIndexedInstancedIndirect(ID3D11Buffer *pBufferForArgs, UINT AlignedByteOffsetForArgs) {
-		LOG(INFO) << "Not hooking DrawIndexedInstancedIndirect";
+		if (warn_draw_indexed_instanced_indirect) {
+			LOG(INFO) << "Not hooking DrawIndexedInstancedIndirect (further warnings will be suppressed)";
+			warn_draw_indexed_instanced_indirect = false;
+		}
 		D3D11Hook::DrawIndexedInstancedIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
 	}
+	bool warn_draw_indexed_indirect = true;
 	virtual void DrawInstancedIndirect(ID3D11Buffer *pBufferForArgs, UINT AlignedByteOffsetForArgs) {
-		LOG(INFO) << "Not hooking DrawInstancedIndirect";
+		if (warn_draw_indexed_indirect) {
+			LOG(INFO) << "Not hooking DrawInstancedIndirect (further warnings will be suppressed)";
+			warn_draw_indexed_indirect = false;
+		}
 		D3D11Hook::DrawIndexedInstancedIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
 	}
 
