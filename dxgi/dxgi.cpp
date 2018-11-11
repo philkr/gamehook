@@ -5,7 +5,7 @@
 static HRESULT NotImpl() {
 	return E_NOTIMPL;
 }
-static constexpr FARPROC not_impl = (FARPROC)*NotImpl;
+static const FARPROC not_impl = (FARPROC)*NotImpl;
 
 #define VISIT_DXGI(F) \
 F(ApplyCompatResolutionQuirking) \

@@ -33,8 +33,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="view.html">
-      <Filter>Resource Files</Filter>
-    </None>
+    <CustomBuild Include="view.html" />
   </ItemGroup>
 </Project>
