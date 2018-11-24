@@ -168,12 +168,23 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 	virtual HRESULT CreateBuffer(const D3D11_BUFFER_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Buffer **ppBuffer) {
 		TIC;
 		HRESULT hr = D3D11Hook::CreateBuffer(pDesc, pInitialData, ppBuffer);
-		if (SUCCEEDED(hr) && ppBuffer && *ppBuffer && pDesc && pDesc->BindFlags | D3D11_BIND_CONSTANT_BUFFER && pDesc->ByteWidth <= 256)
-			memory_manager.cacheBuffer(*ppBuffer);
+		if (SUCCEEDED(hr) && ppBuffer && *ppBuffer && pDesc) {
+			if ((pDesc->BindFlags & D3D11_BIND_CONSTANT_BUFFER) && pDesc->ByteWidth <= 256)
+				memory_manager.cacheBuffer(*ppBuffer);
+			if (pDesc->BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER)) {
+				// TODO: Compute the index / vertex buffer hash (and hope it doesn't change)
+			}
+		}
 		TOC;
 		return hr;
 	}
-
+	virtual HRESULT CreateTexture2D(const D3D11_TEXTURE2D_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Texture2D **ppTexture2D) {
+		HRESULT hr = D3D11Hook::CreateTexture2D(pDesc, pInitialData, ppTexture2D);
+		if (SUCCEEDED(hr) && ppTexture2D && *ppTexture2D && pDesc) {
+			// TODO: Compute the texture hash (and hope it doesn't change) pInitialData
+		}
+		return hr;
+	}
 	virtual std::shared_ptr<GPUMemory> readBuffer(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate) {
 		TIC;
 		std::shared_ptr<GPUMemory> r;
