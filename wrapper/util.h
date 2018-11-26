@@ -59,3 +59,5 @@ struct Timer {
 	Timer &operator++();
 };
 std::ostream & operator<<(std::ostream & s, const Timer & t);
+
+void murmur3(const void * data, uint32_t len, uint32_t * out);

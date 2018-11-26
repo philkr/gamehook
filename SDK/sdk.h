@@ -21,6 +21,9 @@
 //  to these objects in your code! Copy them if needed.
 
 
+typedef ShaderHash BufferHash;
+typedef ShaderHash TextureHash;
+
 /********************************************************/
 /** Constant Buffer object                             **/
 /********************************************************/

@@ -35,6 +35,8 @@ static Timer timer[4];
 #define PRINT_TIMER
 #endif
 
+const uint32_t MAX_BUFFER_HASH_SIZE = (1<<15);
+
 template<typename O, typename T> O makeIndex(size_t i, const T & t) {
 	return O{ (uint32_t)i };
 }
@@ -144,8 +146,24 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 	BufferInfo * buffer_info;
 	std::unordered_map<std::string, std::shared_ptr<CBufferImp>> bound_cbuffers;
 
+	VHook<ID3D11Buffer> buffer_release_hook;
+	ULONG WINAPI ID3D11Buffer_release(ID3D11Buffer * that) {
+		ULONG r = buffer_release_hook(that, &ID3D11Buffer::Release);
+		if (r == 0) {
+			// LOG(INFO) << "Delete Buffer " << that;
+		}
+		return r;
+	}
+	static GameHookBuffer * sigleton_;
+	static ULONG WINAPI static_ID3D11Buffer_release(ID3D11Buffer * that) {
+		return sigleton_->ID3D11Buffer_release(that);
+	}
+
 	GameHookBuffer(BufferInfo * buffer_info) :memory_manager(this), buffer_info(buffer_info) {
 		ASSERT(buffer_info != NULL);
+		if (sigleton_ != NULL)
+			LOG(ERR) << "More than one GameHookBuffer created. Things will end badly from here on!";
+		sigleton_ = this;
 	}
 
 	virtual HRESULT Map(ID3D11Resource *pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE *pMappedResource) override {
@@ -172,7 +190,15 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 			if ((pDesc->BindFlags & D3D11_BIND_CONSTANT_BUFFER) && pDesc->ByteWidth <= 256)
 				memory_manager.cacheBuffer(*ppBuffer);
 			if (pDesc->BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER)) {
-				// TODO: Compute the index / vertex buffer hash (and hope it doesn't change)
+				// onCreateBuffer(buffer_id(*ppBuffer));
+				if (pInitialData && pInitialData->pSysMem) {
+					BufferHash hash;
+					uint32_t size = min(MAX_BUFFER_HASH_SIZE, pDesc->ByteWidth);
+					murmur3(pInitialData->pSysMem, size, hash.h);
+					// TODO: Store the hash
+					// LOG(INFO) << "Create buffer " << pDesc->BindFlags << " " << pDesc->ByteWidth << " " << hash;
+					buffer_release_hook.setup(*ppBuffer, &ID3D11Buffer::Release, static_ID3D11Buffer_release);
+				}
 			}
 		}
 		TOC;
@@ -181,7 +207,14 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 	virtual HRESULT CreateTexture2D(const D3D11_TEXTURE2D_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Texture2D **ppTexture2D) {
 		HRESULT hr = D3D11Hook::CreateTexture2D(pDesc, pInitialData, ppTexture2D);
 		if (SUCCEEDED(hr) && ppTexture2D && *ppTexture2D && pDesc) {
-			// TODO: Compute the texture hash (and hope it doesn't change) pInitialData
+			if ((pDesc->BindFlags & (D3D11_BIND_SHADER_RESOURCE)) && !(pDesc->BindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))) {
+				if (pInitialData && pInitialData->pSysMem) {
+					TextureHash hash;
+					uint32_t size = min(MAX_BUFFER_HASH_SIZE, pDesc->Width * pDesc->Height);
+					murmur3(pInitialData->pSysMem, size, hash.h);
+					// TODO: Store the hash
+				}
+			}
 		}
 		return hr;
 	}
@@ -236,6 +269,7 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 		if (bi) bound_cbuffers[bi->name] = bi;
 	}
 };
+GameHookBuffer * GameHookBuffer::sigleton_ = nullptr;
 
 // GameHookShader does all the shader management
 struct GameHookShader : virtual public D3D11Hook, virtual public MainGameController {
@@ -1070,10 +1104,11 @@ template<typename T> struct SwapChainHook {
 	static void wrap(REFIID riid, void **p) {
 		if (p && *p) {
 			if (riid == __uuidof(T)) {
-				if (!hook.func_) {
+				if (!hook.original_) {
 					// Setup the hook
+					int vti = vTableIndex(&IDXGIFactory::CreateSwapChain);
 					uintptr_t* pInterfaceVTable = (uintptr_t*)*(uintptr_t*)*p;
-					hook.setup((HRESULT(WINAPI *)(T*, IUnknown *, DXGI_SWAP_CHAIN_DESC *, IDXGISwapChain **))pInterfaceVTable[10], DXGICreateSwapChain);// 10: IDXGIFactory::CreateSwapChain
+					hook.setup((HRESULT(WINAPI *)(T*, IUnknown *, DXGI_SWAP_CHAIN_DESC *, IDXGISwapChain **))pInterfaceVTable[vti], DXGICreateSwapChain);
 				}
 			}
 		}

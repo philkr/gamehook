@@ -5,7 +5,7 @@
 #include <string>
 #include <ctime>
 #include <windows.h>
-
+#include "external/murmur/MurmurHash3.h"
 #include "config/config.h"
 
 #define EXPORT extern "C" __declspec(dllexport) 
@@ -123,4 +123,8 @@ Timer::operator int() const {
 Timer & Timer::operator++() {
 	it++;
 	return *this;
+}
+
+void murmur3(const void * data, uint32_t len, uint32_t * out) {
+	MurmurHash3_x64_128(data, len, 0x6384BA69, out);
 }
