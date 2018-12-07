@@ -61,12 +61,29 @@ template<typename O> O makeIndex(size_t i, ID3D11RenderTargetView * const & t) {
 template<typename T, typename O> struct IndexHandler {
 	std::unordered_map<T, O> index_map;
 	std::vector<T> reverse_id;
+	std::vector<size_t> free_ids;
+	IndexHandler() {
+		index_map.reserve(1 << 20);
+		reverse_id.reserve(1 << 20);
+	}
+	size_t _addReverseId(const T & t) {
+		if (free_ids.size()) {
+			size_t id = free_ids.back();
+			free_ids.pop_back();
+			reverse_id[id] = t;
+			return id;
+		}
+		size_t id = reverse_id.size();
+		reverse_id.push_back(t);
+		return id;
+	}
 	O operator()(const T & t) {
 		if (!t) return 0;
 		auto i = index_map.find(t);
 		if (i == index_map.end()) {
-			reverse_id.push_back(t);
-			i = index_map.insert(std::make_pair(t, makeIndex<O>(reverse_id.size(), t))).first;
+			size_t rev_id = _addReverseId(t);
+			auto p = std::make_pair(t, makeIndex<O>(rev_id+1, t));
+			i = index_map.insert(p).first;
 		}
 		return i->second;
 	}
@@ -104,6 +121,20 @@ template<typename T, typename O> struct IndexHandler {
 		current = -1;
 		if (t)
 			current = (*this)(t);
+	}
+	O remove(const T & t) {
+		auto i = index_map.find(t);
+		if (i != index_map.end()) {
+			O o = i->second;
+			index_map.erase(i);
+			if (o.id) {
+				size_t id = o.id - 1;
+				free_ids.push_back(id);
+				reverse_id[id] = nullptr;
+			}
+			return o;
+		}
+		return (O)0;
 	}
 };
 
@@ -143,14 +174,19 @@ struct GameHookIO : virtual public IOHookHigh, virtual public MainGameController
 struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameController {
 	GPUMemoryManager memory_manager;
 	IndexHandler<ID3D11Buffer*, Buffer> buffer_id;
+	std::vector<BufferHash> buffer_hash;
 	BufferInfo * buffer_info;
 	std::unordered_map<std::string, std::shared_ptr<CBufferImp>> bound_cbuffers;
 
 	VHook<ID3D11Buffer> buffer_release_hook;
 	ULONG WINAPI ID3D11Buffer_release(ID3D11Buffer * that) {
+		D3D11_BUFFER_DESC desc;
+		that->GetDesc(&desc);
 		ULONG r = buffer_release_hook(that, &ID3D11Buffer::Release);
 		if (r == 0) {
-			// LOG(INFO) << "Delete Buffer " << that;
+			Buffer b = buffer_id.remove(that);
+			if (0 < b.id && b.id < buffer_hash.size())
+				buffer_hash[b.id] = 0;
 		}
 		return r;
 	}
@@ -190,32 +226,19 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 			if ((pDesc->BindFlags & D3D11_BIND_CONSTANT_BUFFER) && pDesc->ByteWidth <= 256)
 				memory_manager.cacheBuffer(*ppBuffer);
 			if (pDesc->BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER)) {
-				// onCreateBuffer(buffer_id(*ppBuffer));
-				if (pInitialData && pInitialData->pSysMem) {
-					BufferHash hash;
+				uint32_t bid = buffer_id(*ppBuffer);
+				if (pInitialData && pInitialData->pSysMem && bid) {
+					if (buffer_hash.size() <= bid)
+						buffer_hash.resize(bid + 1); 
+					
 					uint32_t size = min(MAX_BUFFER_HASH_SIZE, pDesc->ByteWidth);
-					murmur3(pInitialData->pSysMem, size, hash.h);
-					// TODO: Store the hash
-					// LOG(INFO) << "Create buffer " << pDesc->BindFlags << " " << pDesc->ByteWidth << " " << hash;
-					buffer_release_hook.setup(*ppBuffer, &ID3D11Buffer::Release, static_ID3D11Buffer_release);
+					uint32_t offset = pDesc->ByteWidth - size;
+					murmur3((uint8_t*)pInitialData->pSysMem + offset, size, buffer_hash[bid].h);
 				}
+				buffer_release_hook.setup(*ppBuffer, &ID3D11Buffer::Release, static_ID3D11Buffer_release);
 			}
 		}
 		TOC;
-		return hr;
-	}
-	virtual HRESULT CreateTexture2D(const D3D11_TEXTURE2D_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Texture2D **ppTexture2D) {
-		HRESULT hr = D3D11Hook::CreateTexture2D(pDesc, pInitialData, ppTexture2D);
-		if (SUCCEEDED(hr) && ppTexture2D && *ppTexture2D && pDesc) {
-			if ((pDesc->BindFlags & (D3D11_BIND_SHADER_RESOURCE)) && !(pDesc->BindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))) {
-				if (pInitialData && pInitialData->pSysMem) {
-					TextureHash hash;
-					uint32_t size = min(MAX_BUFFER_HASH_SIZE, pDesc->Width * pDesc->Height);
-					murmur3(pInitialData->pSysMem, size, hash.h);
-					// TODO: Store the hash
-				}
-			}
-		}
 		return hr;
 	}
 	virtual std::shared_ptr<GPUMemory> readBuffer(Buffer b, const std::vector<size_t> & offset, const std::vector<size_t> & n, bool immediate) {
@@ -234,8 +257,13 @@ struct GameHookBuffer : virtual public D3D11Hook, virtual public MainGameControl
 		return d.ByteWidth;
 	}
 	virtual void IASetVertexBuffers(UINT StartSlot, UINT NumBuffers, ID3D11Buffer *const *ppVertexBuffers, const UINT *pStrides, const UINT *pOffsets) {
-		if (StartSlot == 0)
+		if (StartSlot == 0) {
 			buffer_info->vertex = buffer_id(ppVertexBuffers[0]);
+			if (buffer_info->vertex.id < buffer_hash.size())
+				buffer_info->vertex_hash = buffer_hash[buffer_info->vertex.id];
+			else
+				buffer_info->vertex_hash = 0;
+		}
 		D3D11Hook::IASetVertexBuffers(StartSlot, NumBuffers, ppVertexBuffers, pStrides, pOffsets);
 	}
 	virtual void IASetIndexBuffer(ID3D11Buffer *pIndexBuffer, DXGI_FORMAT Format, UINT Offset) {
@@ -297,6 +325,7 @@ public: // Types
 	};
 public: // Variables
 	IndexHandler<ID3D11ShaderResourceView*, Texture2D> srv_id;
+	std::unordered_map<ID3D11Texture2D*,TextureHash> texture_hash;
 	std::unordered_map<ID3D11PixelShader*, std::shared_ptr<Shader> > pixel_shader_;
 	std::unordered_map<ID3D11VertexShader*, std::shared_ptr<Shader> > vertex_shader_;
 
@@ -328,6 +357,20 @@ public: // D3D11Hook functions
 		for (auto s : vertex_shader_) onCreateShader(s.second);
 	}
 
+	virtual HRESULT CreateTexture2D(const D3D11_TEXTURE2D_DESC *pDesc, const D3D11_SUBRESOURCE_DATA *pInitialData, ID3D11Texture2D **ppTexture2D) {
+		HRESULT hr = D3D11Hook::CreateTexture2D(pDesc, pInitialData, ppTexture2D);
+		if (SUCCEEDED(hr) && ppTexture2D && *ppTexture2D && pDesc) {
+			if ((pDesc->BindFlags & (D3D11_BIND_SHADER_RESOURCE)) && !(pDesc->BindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))) {
+				if (pInitialData && pInitialData->pSysMem) {
+					TextureHash hash;
+					uint32_t size = min(MAX_BUFFER_HASH_SIZE, pDesc->Width * pDesc->Height);
+					murmur3(pInitialData->pSysMem, size, hash.h);
+					texture_hash[*ppTexture2D] = hash;
+				}
+			}
+		}
+		return hr;
+	}
 	virtual HRESULT CreateVertexShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11VertexShader **ppVertexShader) {
 		TIC;
 		HRESULT r = D3D11Hook::CreateVertexShader(pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
@@ -476,8 +519,22 @@ public: // D3D11Hook functions
 	}
 
 	virtual void PSSetShaderResources(UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView *const *ppShaderResourceViews) {
-		if (StartSlot == 0)
+		if (StartSlot == 0 && ppShaderResourceViews) {
 			shader_info->ps_texture_id = srv_id(ppShaderResourceViews[0]);
+			shader_info->ps_texture_hash = 0;
+			if (ppShaderResourceViews[0]) {
+				D3D11_SHADER_RESOURCE_VIEW_DESC desc;
+				ppShaderResourceViews[0]->GetDesc(&desc);
+				if (desc.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
+					ID3D11Resource * res;
+					ppShaderResourceViews[0]->GetResource(&res);
+					auto i = texture_hash.find((ID3D11Texture2D*)res);
+					if (i != texture_hash.end())
+						shader_info->ps_texture_hash = i->second;
+					res->Release();
+				}
+			}
+		}
 		D3D11Hook::PSSetShaderResources(StartSlot, NumViews, ppShaderResourceViews);
 	}
 };

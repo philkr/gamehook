@@ -17,6 +17,8 @@ struct ShaderHash {
 	bool operator!=(const ShaderHash & o) const;
 	operator bool() const;
 	operator std::string() const;
+	void reset();
+	ShaderHash & operator=(uint32_t s);
 	ShaderHash & operator=(const std::string & s);
 	ShaderHash(const std::string & s);
 	ShaderHash() = default;
@@ -109,6 +111,13 @@ inline ShaderHash::operator std::string() const {
 	std::ostringstream o;
 	o << *this;
 	return o.str();
+}
+inline void ShaderHash::reset() {
+	h[0] = h[1] = h[2] = h[3] = 0;
+}
+inline ShaderHash & ShaderHash::operator=(uint32_t c) {
+	h[0] = h[1] = h[2] = h[3] = c;
+	return *this;
 }
 inline ShaderHash & ShaderHash::operator=(const std::string & s) {
 	std::istringstream(s) >> *this;

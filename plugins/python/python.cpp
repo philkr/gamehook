@@ -342,13 +342,16 @@ PYBIND11_EMBEDDED_MODULE(api, m) {
 	py::class_<BufferInfo>(m, "BufferInfo")
 		.def_readonly("vertex", &BufferInfo::vertex)
 		.def_readonly("index", &BufferInfo::index)
+		.def_readonly("vertex_hash", &BufferInfo::vertex_hash)
+		.def_readonly("index_hash", &BufferInfo::index_hash)
 		.def_readonly("pixel_constant", &BufferInfo::pixel_constant)
 		.def_readonly("vertex_constant", &BufferInfo::vertex_constant);
 
 	py::class_<ShaderInfo>(m, "ShaderInfo")
 		.def_readonly("vertex", &ShaderInfo::vertex)
 		.def_readonly("pixel", &ShaderInfo::pixel)
-		.def_readonly("ps_texture_id", &ShaderInfo::ps_texture_id);
+		.def_readonly("ps_texture_id", &ShaderInfo::ps_texture_id)
+		.def_readonly("ps_texture_hash", &ShaderInfo::ps_texture_hash);
 
 	py::class_<RenderTargetInfo>(m, "RenderTargetInfo")
 		.def_readonly("outputs", &RenderTargetInfo::outputs)

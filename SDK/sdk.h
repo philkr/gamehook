@@ -90,11 +90,14 @@ struct GPUMemory {
 struct BufferInfo {
 	Buffer vertex = 0;
 	Buffer index = 0;
+	BufferHash vertex_hash;
+	BufferHash index_hash;
 	std::vector<Buffer> pixel_constant, vertex_constant;
 };
 struct ShaderInfo {
 	ShaderHash vertex, pixel;
 	Texture2D ps_texture_id;
+	TextureHash ps_texture_hash;
 };
 struct RenderTargetInfo {
 	std::vector<RenderTargetView> outputs;
