@@ -93,13 +93,11 @@ template<typename T, typename O> struct IndexHandler {
 		return 0;
 	}
 	void operator()(std::vector<O> & v, const T * t, size_t n, size_t offset=0) {
-		v.resize(offset + n);
-		size_t last_index_used = 0;
+		if (v.size() <= offset + n)
+			v.resize(offset + n);
 		for (size_t i = 0; i < n; i++) {
 			v[offset + i] = (*this)(t[i]);
-			if (v[offset + i]) last_index_used = offset + i + 1;
 		}
-		v.resize(last_index_used);
 	}
 	std::vector<O> operator()(const T * t, size_t n) {
 		if (!t) return std::vector<O>();
